@@ -20,6 +20,9 @@ TicketJunkies 2.0 is the fresh home for the project. It starts from everything t
 - **Includes v1.3.7 and v1.3.8** (not yet on the live site, which runs 1.3.6): weather, map, events and calendar follow the visitor's location; secure payment section with Visa / Mastercard / Amex logos; My Tickets / My Dashboard menu link in a green box.
 - Everything else (ticket scanner, shopping cart, organizer and admin dashboards, mobile app) is carried over unchanged.
 
+## What's new in 2.0.3
+- **Reorder ticket types:** in Create / Edit event, drag a ticket by its ⠿ handle (or use the ↑ ↓ buttons) to set the order. Click **Save changes** and the event page shows the tickets in that order. Works with a mouse and on phones/tablets.
+
 ## What's new in 2.0.2
 - **Secure checkout badge:** a green shield-and-lock "Your purchase is 100% secure" badge at the bottom of checkout, with small, centered Visa, Mastercard and American Express logos under "We accept these cards".
 - **Footer:** the "Get the app" link is removed.

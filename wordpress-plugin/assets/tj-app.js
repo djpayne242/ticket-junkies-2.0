@@ -2039,7 +2039,12 @@ async function pageEventForm(id) {
   };
   const renderTiers = () => {
     document.getElementById('tiers').innerHTML = tiers.map((t, i) => `
-      <div class="tier-row${t.cancelled ? ' tier-cancelled' : ''}">
+      <div class="tier-row${t.cancelled ? ' tier-cancelled' : ''}" data-idx="${i}">
+        <div class="tier-bar">
+          <span class="tier-handle" title="Drag to change the order on the event page" aria-hidden="true">⠿</span>
+          <span class="tier-pos">Ticket ${i + 1}${tiers.length > 1 ? ' <span class="muted small">· drag to reorder</span>' : ''}</span>
+          <span class="tier-move"><button type="button" class="btn btn-ghost btn-sm" data-up="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Move ${esc(t.name || 'ticket')} up" title="Move up">↑</button><button type="button" class="btn btn-ghost btn-sm" data-down="${i}" ${i === tiers.length - 1 ? 'disabled' : ''} aria-label="Move ${esc(t.name || 'ticket')} down" title="Move down">↓</button></span>
+        </div>
         <div class="field"><label>Ticket name</label><input data-k="name" value="${esc(t.name)}" placeholder="e.g. VIP" required /></div>
         <div class="field"><label>Ticket type</label><select data-k="kind" ${t.sold ? 'disabled title="Locked after sales"' : ''}>
           <option value="paid" ${tierKindOf(t) === 'paid' ? 'selected' : ''}>💵 Paid</option>
@@ -2073,6 +2078,33 @@ async function pageEventForm(id) {
       if (t.sold && !confirm(`Delete "${t.name}"?\n\n${t.sold} ticket${t.sold === 1 ? ' was' : 's were'} already issued. Those tickets stay valid and stay in your reports; refunds can be made from Orders.\n\nThis ticket type will be removed from sale and from the event page when you save.`)) return;
       tiers.splice(Number(b.dataset.rm), 1); renderTiers();
       if (t.id) toast('Ticket type removed — click Save to apply');
+    }));
+    // ---- reorder: ↑/↓ buttons and drag by the ⠿ handle (mouse, touch and pen) ----
+    const move = (from, to) => { if (to < 0 || to >= tiers.length || from === to) return; syncTiers(); const [t] = tiers.splice(from, 1); tiers.splice(to, 0, t); renderTiers(); };
+    document.querySelectorAll('[data-up]').forEach((b) => (b.onclick = () => move(Number(b.dataset.up), Number(b.dataset.up) - 1)));
+    document.querySelectorAll('[data-down]').forEach((b) => (b.onclick = () => move(Number(b.dataset.down), Number(b.dataset.down) + 1)));
+    const box = document.getElementById('tiers');
+    box.querySelectorAll('.tier-handle').forEach((h) => (h.onpointerdown = (e) => {
+      if (tiers.length < 2) return;
+      e.preventDefault();
+      syncTiers();
+      const row = h.closest('.tier-row');
+      row.classList.add('tier-dragging'); box.classList.add('tiers-sorting');
+      try { h.setPointerCapture(e.pointerId); } catch {}
+      h.onpointermove = (ev) => {
+        const others = [...box.querySelectorAll('.tier-row')].filter((r) => r !== row);
+        const after = others.find((r) => { const b = r.getBoundingClientRect(); return ev.clientY < b.top + b.height / 2; });
+        if (after) { if (row.nextElementSibling !== after) box.insertBefore(row, after); } else if (box.lastElementChild !== row) box.appendChild(row);
+        if (ev.clientY < 60) scrollBy(0, -12); else if (ev.clientY > innerHeight - 60) scrollBy(0, 12);
+      };
+      h.onpointerup = h.onpointercancel = () => {
+        h.onpointermove = h.onpointerup = h.onpointercancel = null;
+        const order = [...box.querySelectorAll('.tier-row')].map((r) => Number(r.dataset.idx));
+        const changed = order.some((v, k) => v !== k);
+        tiers = order.map((k) => tiers[k]);
+        renderTiers();
+        if (changed) toast('Ticket order changed — click Save to apply');
+      };
     }));
     document.querySelectorAll('[data-cancel]').forEach((b) => (b.onclick = () => {
       syncTiers();

@@ -1375,3 +1375,13 @@ html[data-theme="dark"] .area-gps { color: #8fb6ec; }
 /* admin: assign an event to another organizer */
 .assign-row { display: flex; gap: 6px; margin-top: 6px; align-items: center; flex-wrap: wrap; }
 .assign-row select { max-width: 220px; padding: 6px 8px; font-size: .85rem; }
+
+/* ticket editor: drag to reorder */
+.tier-row .tier-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: -2px 0 2px; }
+.tier-handle { cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; font-size: 1.35rem; line-height: 1; padding: 6px 8px; border-radius: 8px; color: var(--muted); border: 1px dashed var(--line); }
+.tier-handle:hover { color: var(--ink); background: var(--card); }
+.tier-pos { font-weight: 700; font-size: .92rem; flex: 1; }
+.tier-move { display: flex; gap: 4px; }
+.tier-move .btn { padding: 4px 10px; min-width: 34px; }
+.tiers-sorting, .tiers-sorting * { cursor: grabbing !important; user-select: none; }
+.tier-row.tier-dragging { outline: 2px solid #84d65f; box-shadow: 0 10px 24px rgba(0,0,0,.25); opacity: .92; position: relative; z-index: 2; }
