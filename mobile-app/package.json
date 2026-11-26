@@ -1,0 +1,25 @@
+{
+  "name": "ticketjunkies-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TicketJunkies for iPhone and Android (App Store / Google Play). Loads https://ticketjunkies.com inside a native app with camera access for the door scanner.",
+  "scripts": {
+    "setup": "npm install && npx cap add android && npx cap add ios && npm run native && npm run icons && npx cap sync",
+    "native": "node scripts/native-setup.mjs",
+    "icons": "npx @capacitor/assets generate --iconBackgroundColor '#ffffff' --iconBackgroundColorDark '#12161f' --splashBackgroundColor '#ffffff' --splashBackgroundColorDark '#12161f'",
+    "sync": "npx cap sync",
+    "android": "npx cap open android",
+    "ios": "npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.3",
+    "@capacitor/core": "^8.6.3",
+    "@capacitor/ios": "^8.6.3",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.6.3"
+  }
+}

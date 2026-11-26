@@ -1,0 +1,26 @@
+{
+  "appId": "com.ticketjunkies.app",
+  "appName": "TicketJunkies",
+  "webDir": "www",
+  "appendUserAgent": "TicketJunkiesApp",
+  "backgroundColor": "#ffffff",
+  "server": {
+    "url": "https://ticketjunkies.com",
+    "cleartext": false,
+    "allowNavigation": ["ticketjunkies.com", "*.ticketjunkies.com"],
+    "errorPath": "offline.html"
+  },
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#ffffff",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#ffffff"
+  },
+  "plugins": {
+    "SplashScreen": { "launchShowDuration": 1200, "launchAutoHide": true, "backgroundColor": "#ffffff", "showSpinner": false },
+    "SystemBars": { "insetsHandling": "css" }
+  }
+}

@@ -1,0 +1,87 @@
+
+/* =========================================================
+   WordPress / Elementor integration
+   ========================================================= */
+/* Brand colors follow Elementor's Global Colors (Site Settings → Global Colors):
+   Primary = blue, Secondary = green, Accent = orange. */
+.tj-root, body.tj-page {
+  --blue: var(--e-global-color-primary, #376eb8);
+  --green: var(--e-global-color-secondary, #84d65f);
+  --orange: var(--e-global-color-accent, #eb742a);
+  --blue-d: color-mix(in srgb, var(--blue) 78%, #000);
+  --green-d: color-mix(in srgb, var(--green) 80%, #000);
+  --orange-d: color-mix(in srgb, var(--orange) 85%, #000);
+}
+/* the stand-alone "body" rules were scoped to .tj-root; undo the page-level parts for widgets */
+.tj-root { display: block; min-height: 0; background: transparent; overflow: visible; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); line-height: 1.5; }
+.tj-root.tj-screen { display: block; }
+body.tj-page { background: var(--bg); color: var(--ink); overflow-x: hidden; }
+body.tj-page .site-main, body.tj-page .page-content { background: transparent; }
+.tj-root *, .tj-root *::before, .tj-root *::after { box-sizing: border-box; }
+.tj-root h1, .tj-root h2, .tj-root h3, .tj-root h4 { color: inherit; font-family: inherit; }
+.tj-root h1 { font-size: 2.1rem; font-weight: 800; }
+.tj-root h2 { font-size: 1.6rem; font-weight: 800; }
+.tj-root h3 { font-size: 1.15rem; font-weight: 700; }
+.tj-root .display { font-family: Anton, Impact, sans-serif; font-weight: 400; }
+
+/* Neutralise theme button/input styles inside TicketJunkies (e.g. Hello Elementor's pink buttons) */
+.tj-root button, .tj-root input, .tj-root select, .tj-root textarea { font-family: inherit; font-size: inherit; line-height: normal; letter-spacing: normal; text-transform: none; }
+.tj-root button:not(.btn):not(.chip):not(.link):not(.menu-btn):not([data-theme-set]) { color: inherit; }
+.tj-root [type=button]:focus, .tj-root [type=submit]:focus, .tj-root button:focus { outline: 2px solid color-mix(in srgb, var(--blue) 45%, transparent); outline-offset: 2px; }
+.tj-root .btn { border-width: 0; border-style: solid; text-decoration: none; }
+.tj-root .btn:hover, .tj-root .btn:focus { text-decoration: none; }
+.tj-root .btn-ghost { border-width: 1px; }
+.tj-root button.menu-btn { background: none; border: 0; color: var(--ink); padding: 4px 8px; }
+.tj-root .theme-switch button { border: 0; }
+.tj-root input:not([type=checkbox]):not([type=radio]), .tj-root select, .tj-root textarea { border-radius: 10px; background-color: var(--card); color: var(--ink); }
+.tj-root table { margin: 0; border: 0; }
+.tj-root table td, .tj-root table th { border-left: 0; border-right: 0; border-top: 0; background: transparent; }
+.tj-root table tbody > tr:nth-child(odd) > td, .tj-root table tbody > tr:nth-child(odd) > th { background-color: transparent; }
+.tj-root ul, .tj-root ol { margin-top: 0; }
+.tj-root a:not(.btn):not(.chip):not(.card) { text-decoration: none; }
+.tj-root .card, .tj-root .card:hover { text-decoration: none; color: var(--ink); }
+.tj-root img { height: auto; }
+.tj-root .brand img { height: 40px; }
+
+/* Header & footer printed by the plugin */
+.tj-site-header { position: sticky; top: 0; z-index: 9990; }
+.admin-bar .tj-site-header { top: 32px; }
+@media (max-width: 782px) { .admin-bar .tj-site-header { top: 0; } }
+.tj-site-header .topbar { position: relative; }
+.tj-site-header .wrap, .tj-site-footer .wrap { max-width: 1640px; }
+.tj-site-footer .footer { margin-top: 0; }
+.tj-site-footer .footer-links { display: flex; gap: 18px; flex-wrap: wrap; }
+.tj-site-footer .footer-links a { color: #cfd5df; }
+
+/* Widgets used inside an Elementor layout */
+.tj-widget { width: 100%; }
+.tj-widget .search { max-width: none; }
+.tj-hero-side { position: static !important; width: 100% !important; margin: 0 !important; }
+.tj-widget .chips { margin-bottom: 0; }
+.tj-widget .hero-cta { margin-top: 0; }
+.tj-widget[data-tj-widget="cta"] .hero-cta { color: inherit; }
+.tj-widget[data-tj-widget="cta"] .hero-cta a.link { color: inherit; }
+.tj-float { position: relative; z-index: 99999; }
+.tj-editor-note { border: 2px dashed var(--line); border-radius: 14px; padding: 18px; color: var(--muted); font-size: .9rem; background: var(--card); }
+
+/* [ticketjunkies widget="hero"]: the original orange & blue "Get your ticket fix." box */
+.tj-widget .hero.tj-hero { margin: 0 0 26px; text-align: left; }
+.tj-widget .hero.tj-hero h1 { color: #fff; font-family: Anton, Impact, sans-serif; text-transform: uppercase; letter-spacing: .5px; line-height: 1.05; margin: 0 0 10px; }
+.tj-widget .hero.tj-hero p { color: #fff; }
+.tj-widget .hero.tj-hero .hero-cta { margin-top: 18px; }
+.tj-widget .hero.tj-hero .search input, .tj-widget .hero.tj-hero .search select { margin: 0; box-shadow: none; }
+.tj-widget .hero.tj-hero.no-side > h1, .tj-widget .hero.tj-hero.no-side > p, .tj-widget .hero.tj-hero.no-side > .search, .tj-widget .hero.tj-hero.no-side > .hero-cta { max-width: none; }
+/* WordPress adds <br> between shortcodes in a Text block — hide the empty gaps around TicketJunkies blocks */
+.tj-widget + br { display: none; }
+
+/* Elementor hero container (homepage) */
+.tj-hero-box { border-radius: 22px; overflow: hidden; }
+.tj-hero-box .elementor-heading-title { font-family: Anton, Impact, sans-serif; text-transform: uppercase; letter-spacing: .5px; }
+@media (max-width: 1000px) { .tj-site-header .nav { top: 70px; } }
+@media (max-width: 640px) { .tj-site-header .nav { top: 60px; } }
+.tj-root .tier select { width: auto; min-width: 74px; flex: none; }
+.tj-root .tier { align-items: center; }
+.tj-root select { background-image: none; }
+
+/* preloader host: no box of its own */
+.tj-root.tj-pre-host { display: contents; min-height: 0; }

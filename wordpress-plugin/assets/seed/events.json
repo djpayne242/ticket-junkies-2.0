@@ -1,0 +1,49 @@
+[
+ {
+  "id": "evt_168d4689b4794d91",
+  "title": "Dj Payne Birthday Celebration",
+  "category": "Music",
+  "description": "It's The Ledgend Himself Dj Payne Celebrating His Annual Birthday Party With Some Of His Friends Selector Ty & 3D - Dj Tank - Dj Hype",
+  "startsAt": "2026-12-31T00:00:00.000Z",
+  "endsAt": "2026-12-31T09:00:00.000Z",
+  "venue": "Captain's Deck Nassau, Bahamas",
+  "address": "Bay Street",
+  "city": "Bahamas",
+  "imageUrl": "/uploads/d8b5b5b23ff209c4c930-opt.jpg",
+  "status": "published",
+  "tiers": [
+   {
+    "id": "tier_85cc11e61d5cc14d",
+    "name": "General Admission",
+    "price": 25,
+    "quantity": 100,
+    "sold": 1
+   },
+   {
+    "id": "tier_fdb3ad22221756c6",
+    "name": "VIP",
+    "price": 50,
+    "quantity": 50,
+    "sold": 0
+   },
+   {
+    "id": "tier_e28aa8a5b759f7e1",
+    "name": "Table",
+    "price": 250,
+    "quantity": 250,
+    "sold": 0
+   }
+  ],
+  "createdAt": "2026-11-20T16:02:12.432Z",
+  "updatedAt": "2026-11-22T17:26:32.886Z",
+  "lat": 25.076374,
+  "lng": -77.343382,
+  "geoPrecision": "city",
+  "imageShareUrl": "/uploads/d8b5b5b23ff209c4c930-share.jpg",
+  "organizerId": "usr_137c957024571af1",
+  "organizerName": "Dj Payne Events",
+  "organizers": [
+   "Dj Payne Events"
+  ]
+ }
+]

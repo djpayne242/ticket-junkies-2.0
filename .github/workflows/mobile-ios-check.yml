@@ -1,0 +1,21 @@
+# Checks that the iPhone app builds (no Apple account needed). Publishing to the App Store is done from Xcode on a Mac —
+# see mobile-app/README.md. GitHub → Actions → "Mobile app – iPhone build check" → Run workflow.
+name: Mobile app – iPhone build check
+on: { workflow_dispatch: {} }
+jobs:
+  ios:
+    runs-on: macos-latest
+    defaults: { run: { working-directory: mobile-app } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: '22' }
+      - name: Create the iPhone project
+        run: |
+          npm install
+          npx cap add ios
+          node scripts/native-setup.mjs
+          npx @capacitor/assets generate --ios --iconBackgroundColor '#ffffff' --splashBackgroundColor '#ffffff' --splashBackgroundColorDark '#12161f'
+          npx cap sync ios
+      - name: Build for the iPhone simulator
+        run: xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build | tail -n 30

@@ -1,0 +1,8 @@
+# Private data: never upload customer accounts, orders, passwords or uploaded images
+node-site/data/
+node-site/public/uploads/*
+!node-site/public/uploads/.gitkeep
+*import*.json
+*.log
+.DS_Store
+node_modules/
