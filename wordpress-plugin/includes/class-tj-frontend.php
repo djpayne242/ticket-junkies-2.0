@@ -318,7 +318,7 @@ final class TJ_Frontend {
     $text = $ui['footer_text'] !== '' ? esc_html($ui['footer_text']) : esc_html(get_bloginfo('name')) . '. All rights reserved.';
     echo '<div class="tj-root tj-site-footer"><footer class="footer"><div class="wrap footer-inner">';
     echo '<img src="' . esc_url(self::logo()) . '" alt="' . esc_attr(get_bloginfo('name')) . '" class="footer-logo" />';
-    echo '<div class="footer-links"><a href="' . esc_url(home_url('/')) . '">Browse events</a><a href="' . esc_url(tj_route_url('#/register?role=organizer')) . '">Sell tickets</a><a href="' . esc_url(tj_route_url('#/register')) . '">Create account</a>' . (apply_filters('tj_pwa', true) ? '<a href="' . esc_url(tj_route_url('#/app')) . '">📲 Get the app</a>' : '') . '</div>';
+    echo '<div class="footer-links"><a href="' . esc_url(home_url('/')) . '">Browse events</a><a href="' . esc_url(tj_route_url('#/register?role=organizer')) . '">Sell tickets</a><a href="' . esc_url(tj_route_url('#/register')) . '">Create account</a>' . '</div>';
     echo '<p class="muted small">© <span id="year">' . esc_html(gmdate('Y')) . '</span> ' . $text . '</p>';
     echo '</div></footer></div>';
   }

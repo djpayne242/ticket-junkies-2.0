@@ -283,7 +283,7 @@ function seriesDates(ev, viewer) {
     .filter((e) => e.seriesId === ev.seriesId && (owner || e.status === 'published'))
     .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt))
     .map((e) => ({ id: e.id, startsAt: e.startsAt, endsAt: e.endsAt, status: e.status, sessionLabel: e.sessionLabel || '',
-      soldOut: e.tiers.filter((t) => t.visibility !== 'private').every((t) => t.quantity - t.sold <= 0) }));
+      soldOut: e.tiers.filter((t) => isPublicTier(t)).every((t) => t.quantity - t.sold <= 0) }));
 }
 function publicEvent(ev, viewer) {
   const organizer = db.users.find((u) => u.id === ev.organizerId);
@@ -300,11 +300,13 @@ function publicEvent(ev, viewer) {
     organizerName: ev.organizerName || (organizer ? (organizer.organization || organizer.name) : ''),
     isOwner: !!viewer && (viewer.id === ev.organizerId || viewer.role === 'admin'),
     // Private ticket types (comps, guest list, staff…) are only visible to the event's organizer and admins.
-    tiers: ev.tiers.filter((t) => t.visibility !== 'private' || (!!viewer && (viewer.id === ev.organizerId || viewer.role === 'admin')))
-      .map((t) => ({ id: t.id, name: t.name, description: t.description || '', visibility: t.visibility === 'private' ? 'private' : 'public', kind: tierKind(t), price: t.price, suggested: t.suggested ?? null, salesStart: t.salesStart || null, salesEnd: t.salesEnd || null, saleState: tierSaleState(t), onSale: tierOnSale(t), maxPerPerson: t.maxPerPerson || null, boughtByYou: mine[t.id] || 0, remaining: Math.max(0, t.quantity - t.sold), fee: ticketFee(t.price) })),
+    // Cancelled ticket types are shown like private ones (owner and admins only); deleted ones are never shown.
+    tiers: ev.tiers.filter((t) => !t.deleted && (isPublicTier(t) || (!!viewer && (viewer.id === ev.organizerId || viewer.role === 'admin'))))
+      .map((t) => ({ id: t.id, name: t.name, description: t.description || '', visibility: t.visibility === 'private' || t.cancelled ? 'private' : 'public', cancelled: !!t.cancelled, kind: tierKind(t), price: t.price, suggested: t.suggested ?? null, salesStart: t.salesStart || null, salesEnd: t.salesEnd || null, saleState: tierSaleState(t), onSale: tierOnSale(t), maxPerPerson: t.maxPerPerson || null, boughtByYou: mine[t.id] || 0, remaining: Math.max(0, t.quantity - t.sold), fee: ticketFee(t.price) })),
   };
 }
-const isPublicTier = (t) => t.visibility !== 'private';
+// Cancelled ticket types (sales stopped) and deleted ones are never for sale; tickets already sold stay valid.
+const isPublicTier = (t) => t.visibility !== 'private' && !t.cancelled && !t.deleted;
 const TICKET_KINDS = ['paid', 'free', 'donation'];
 // Older ticket types have no kind: $0 = free, anything else = paid
 function tierKind(t) { return TICKET_KINDS.includes(t.kind) ? t.kind : (t.price > 0 ? 'paid' : 'free'); }
@@ -328,7 +330,7 @@ function boughtBy(user, eventId) {
 }
 // Lowest open public price, for "From $X" labels
 function lowestPrice(tiers) {
-  const avail = tiers.filter((t) => t.visibility !== 'private' && t.quantity - t.sold > 0);
+  const avail = tiers.filter((t) => isPublicTier(t) && t.quantity - t.sold > 0);
   const open = avail.filter(tierOnSale);
   if (!open.length) {
     const next = avail.filter((t) => tierSaleState(t) === 'soon').map((t) => t.salesStart).sort()[0] || null;
@@ -432,7 +434,6 @@ function validateEvent(b, existing) {
     const old = t.id && oldTiers.find((o) => o.id === t.id);
     if (old && quantity < old.sold) fail(400, `"${name}" already sold ${old.sold}; quantity can't be lower`);
     if (old && old.sold - (old.comped || 0) > 0 && kind !== tierKind(old)) fail(400, `"${name}" has sales; it can't be changed between paid, free and donation`);
-    if (old && old.sold - (old.comped || 0) > 0 && price !== old.price) fail(400, `"${name}" has sales; its ${kind === 'donation' ? 'minimum donation' : 'price'} can't change`);
     const description = str(t.description, { name: `Description for "${name}"`, max: 300 });
     const visibility = t.visibility === 'private' ? 'private' : 'public';
     // optional: when this ticket type goes on sale (a countdown shows until then)
@@ -458,10 +459,12 @@ function validateEvent(b, existing) {
       maxPerPerson = Number(t.maxPerPerson);
       if (!Number.isInteger(maxPerPerson) || maxPerPerson < 1 || maxPerPerson > 100) fail(400, `Max per person for "${name}" must be a whole number from 1 to 100`);
     }
-    return { id: old ? old.id : newId('tier'), name, description, visibility, kind, price, ...(kind === 'donation' ? { suggested } : {}), salesStart, salesEnd, maxPerPerson, quantity, sold: old ? old.sold : 0, comped: old ? (old.comped || 0) : 0 };
+    const cancelled = !!t.cancelled;
+    return { id: old ? old.id : newId('tier'), name, description, visibility, ...(cancelled ? { cancelled: true } : {}), kind, price, ...(kind === 'donation' ? { suggested } : {}), salesStart, salesEnd, maxPerPerson, quantity, sold: old ? old.sold : 0, comped: old ? (old.comped || 0) : 0 };
   });
+  // A ticket type with sales that is deleted is kept out of sight (no longer sold or shown) so its sold tickets stay valid and in reports.
   for (const o of oldTiers) {
-    if (o.sold > 0 && !tiers.some((t) => t.id === o.id)) fail(400, `"${o.name}" has sales and can't be removed`);
+    if (o.sold > 0 && !tiers.some((t) => t.id === o.id)) tiers.push({ ...o, cancelled: true, deleted: true, deletedAt: o.deletedAt || new Date().toISOString() });
   }
   const lat = b.lat === null || b.lat === '' || b.lat === undefined ? NaN : Number(b.lat);
   const lng = b.lng === null || b.lng === '' || b.lng === undefined ? NaN : Number(b.lng);
@@ -496,7 +499,8 @@ function eventStats(ev) {
   const comped = ev.tiers.reduce((a, t) => a + (t.comped || 0), 0);
   // donation tickets count what buyers actually gave, not the minimum
   const donated = (t) => orders.filter((o) => !o.comp).reduce((a, o) => a + o.items.filter((i) => i.tierId === t.id).reduce((x, i) => x + i.price * i.qty, 0), 0);
-  const revenue = round2(ev.tiers.reduce((a, t) => a + (tierKind(t) === 'donation' ? donated(t) : Math.max(0, t.sold - (t.comped || 0)) * t.price), 0));
+  // revenue = what buyers actually paid (prices can change after sales start)
+  const revenue = round2(ev.tiers.reduce((a, t) => a + donated(t), 0));
   const checkedIn = orders.reduce((a, o) => a + o.tickets.filter((t) => t.checkedIn).length, 0);
   return { sold, capacity, comped, paidSold: sold - comped, revenue, orders: orders.filter((o) => !o.comp).length, compOrders: orders.filter((o) => o.comp).length, checkedIn, shareViews: ev.shareViews || 0 };
 }
@@ -1269,7 +1273,7 @@ function placeOrder(user, ev, body, { dry = false, cartId = '' } = {}) {
     const qty = Number(it.qty);
     if (!qty) continue;
     if (!Number.isInteger(qty) || qty < 0 || qty > 100) fail(400, 'You can buy up to 100 of each ticket type');
-    const tier = ev.tiers.find((t) => t.id === it.tierId && isPublicTier(t)) || fail(400, 'Unknown ticket type');
+    const tier = ev.tiers.find((t) => t.id === it.tierId && isPublicTier(t)) || fail(400, ev.tiers.some((t) => t.id === it.tierId && (t.cancelled || t.deleted)) ? 'This ticket type is no longer on sale' : 'Unknown ticket type');
     if (tier.quantity - tier.sold < qty) fail(409, `Only ${tier.quantity - tier.sold} "${tier.name}" tickets left`);
     if (tier.maxPerPerson) {
       const have = boughtBy(user, ev.id)[tier.id] || 0;
@@ -1347,7 +1351,7 @@ route('POST', '/api/events/:id/comp', ({ req, body, params }) => {
   const user = requireOrganizer(req);
   const ev = ownedEvent(user, params.id);
   if (ev.status === 'cancelled') fail(400, 'This event is cancelled');
-  const tier = ev.tiers.find((t) => t.id === body.tierId) || fail(400, 'Choose a ticket type');
+  const tier = ev.tiers.find((t) => t.id === body.tierId && !t.deleted) || fail(400, 'Choose a ticket type');
   const qty = Number(body.qty);
   if (!Number.isInteger(qty) || qty < 1 || qty > 50) fail(400, 'Quantity must be 1–50');
   if (tier.quantity - tier.sold < qty) fail(409, `Only ${tier.quantity - tier.sold} "${tier.name}" tickets left — raise its quantity first`);
@@ -1619,6 +1623,36 @@ route('DELETE', '/api/admin/users/:id', ({ req, params }) => {
   killSessions(u.id);
   saveDb();
   return { ok: true };
+});
+
+// Admin: assign an event (all dates of a recurring series) to a different organizer account
+route('POST', '/api/admin/events/:id/assign', ({ req, body, params }) => {
+  const admin = requireAdmin(req);
+  const ev = db.events.find((e) => e.id === params.id) || fail(404, 'Event not found');
+  const to = db.users.find((u) => u.id === body.organizerId) || fail(400, 'Choose an organizer');
+  if (to.role !== 'organizer' && to.role !== 'admin') fail(400, 'Events can only be assigned to organizer or administrator accounts');
+  if (to.suspended) fail(400, 'That account is suspended');
+  const from = db.users.find((u) => u.id === ev.organizerId);
+  if (to.id === ev.organizerId) fail(400, 'This event already belongs to that organizer');
+  const fromName = from ? (from.organization || from.name) : '';
+  const toName = to.organization || to.name;
+  const list = ev.seriesId ? db.events.filter((e) => e.seriesId === ev.seriesId && e.organizerId === ev.organizerId) : [ev];
+  const now = new Date().toISOString();
+  for (const e of list) {
+    e.organizerId = to.id;
+    // the displayed organizer name follows the new owner when it showed the previous owner's name
+    const names = eventOrganizers(e);
+    const swapped = names.length ? names.map((n) => (norm(n) === norm(fromName) ? toName : n)) : [toName];
+    e.organizers = [...new Set(swapped)];
+    e.organizerName = e.organizers[0];
+    e.updatedAt = now;
+  }
+  syncDirectory(list[0], to);
+  saveDb();
+  for (const [u, msg] of [[to, `"${ev.title}" was assigned to your account by a TicketJunkies administrator. You can now edit it, see sales and check guests in.`], [from, `"${ev.title}" was moved to another organizer by a TicketJunkies administrator.`]]) {
+    if (u && u.email && u.id !== admin.id) mail(u.email, `Event ${u === to ? 'assigned to you' : 'moved'}: ${ev.title}`, { tag: 'organizer.eventAssigned', heading: u === to ? 'An event was assigned to you' : 'An event was moved', preheader: msg, body: `<p>${h(msg)}</p>`, cta: { label: 'Open dashboard', url: `${site()}/#/dashboard` } });
+  }
+  return { ok: true, moved: list.length, organizer: { id: to.id, name: toName } };
 });
 
 // Saved organizers & venues for the event form (organizers and admins)

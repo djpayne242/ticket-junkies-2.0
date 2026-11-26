@@ -20,6 +20,15 @@ TicketJunkies 2.0 is the fresh home for the project. It starts from everything t
 - **Includes v1.3.7 and v1.3.8** (not yet on the live site, which runs 1.3.6): weather, map, events and calendar follow the visitor's location; secure payment section with Visa / Mastercard / Amex logos; My Tickets / My Dashboard menu link in a green box.
 - Everything else (ticket scanner, shopping cart, organizer and admin dashboards, mobile app) is carried over unchanged.
 
+## What's new in 2.0.2
+- **Secure checkout badge:** a green shield-and-lock "Your purchase is 100% secure" badge at the bottom of checkout, with small, centered Visa, Mastercard and American Express logos under "We accept these cards".
+- **Footer:** the "Get the app" link is removed.
+- **Admin → Users → (organizer) → Events posted:** an *Assign to organizer…* picker moves an event (all dates of a recurring event) to another organizer. Both organizers get an email.
+- **Ticket types that are on sale** (organizers and admins):
+  - **Edit** anything, including the price. People who already bought keep the price they paid; revenue is counted from what buyers actually paid.
+  - **🚫 Cancel** stops sales; buyers can't see or buy it. **↺ Resume sales** puts it back on sale.
+  - **🗑 Delete** removes it. If tickets were already sold, those tickets stay valid and stay in reports; refunds can be made from Orders.
+
 ## What's new in 2.0.1
 - **My Events** in the menu (organizers and admins) now sits in a TicketJunkies-green box.
 - **My Tickets / My Dashboard** in the menu now sits in a white box.

@@ -145,6 +145,7 @@ class TJ_Rest {
     self::route('PUT', '/admin/venues/:id', 'r_admin_venue_update');
     self::route('DELETE', '/admin/venues/:id', 'r_admin_venue_delete');
     self::route('GET', '/admin/events', 'r_admin_events');
+    self::route('POST', '/admin/events/:id/assign', 'r_admin_event_assign');
     self::route('GET', '/admin/orders', 'r_admin_orders');
     self::route('POST', '/admin/orders/:id/refund', 'r_admin_refund');
     self::route('GET', '/admin/settings', 'r_admin_settings');
@@ -336,7 +337,8 @@ class TJ_Rest {
   }
 
   // ---------- events ----------
-  private static function is_public_tier($t) { return self::g($t, 'visibility') !== 'private'; }
+  // Cancelled ticket types (sales stopped) and deleted ones are never for sale; tickets already sold stay valid.
+  private static function is_public_tier($t) { return self::g($t, 'visibility') !== 'private' && empty($t['cancelled']) && empty($t['deleted']); }
   private static function geo_num($v) { return (is_int($v) || is_float($v)) && is_finite((float) $v) ? $v : null; }
   // ---------- ticket kinds: paid = fixed price · free = $0 · donation = buyer picks the amount (price = minimum) ----------
   public static function tier_kind($t) {
@@ -356,7 +358,7 @@ class TJ_Rest {
   public static function lowest_price($tiers) {
     $best = null; $next = null; $avail = 0; $closed = 0;
     foreach ($tiers as $t) {
-      if (self::g($t, 'visibility') === 'private' || $t['quantity'] - $t['sold'] <= 0) continue;
+      if (!self::is_public_tier($t) || $t['quantity'] - $t['sold'] <= 0) continue;
       $avail++;
       $st = self::tier_sale_state($t);
       if ($st === 'closed') { $closed++; continue; }
@@ -383,8 +385,9 @@ class TJ_Rest {
     $own = $viewer && ($viewer['id'] === (int) $ev['organizerId'] || $viewer['role'] === 'admin');
     $tiers = array();
     foreach ($ev['tiers'] as $t) {
-      if (self::g($t, 'visibility') === 'private' && !$own) continue;
-      $tiers[] = array('id' => $t['id'], 'name' => $t['name'], 'description' => (string) self::g($t, 'description', ''), 'visibility' => self::g($t, 'visibility') === 'private' ? 'private' : 'public',
+      // cancelled ticket types are shown like private ones (owner and admins only); deleted ones are never shown
+      if (!empty($t['deleted']) || (!self::is_public_tier($t) && !$own)) continue;
+      $tiers[] = array('id' => $t['id'], 'name' => $t['name'], 'description' => (string) self::g($t, 'description', ''), 'visibility' => self::g($t, 'visibility') === 'private' || !empty($t['cancelled']) ? 'private' : 'public', 'cancelled' => !empty($t['cancelled']),
         'kind' => self::tier_kind($t), 'price' => $t['price'], 'suggested' => self::g($t, 'suggested'), 'salesStart' => self::g($t, 'salesStart'), 'salesEnd' => self::g($t, 'salesEnd'), 'saleState' => self::tier_sale_state($t), 'onSale' => self::tier_on_sale($t), 'maxPerPerson' => self::g($t, 'maxPerPerson') ? (int) $t['maxPerPerson'] : null, 'boughtByYou' => isset($mine[$t['id']]) ? $mine[$t['id']] : 0, 'remaining' => max(0, $t['quantity'] - $t['sold']), 'fee' => self::n(self::ticket_fee($t['price'])));
     }
     return array(
@@ -410,7 +413,7 @@ class TJ_Rest {
       if (self::g($e, 'seriesId') !== $ev['seriesId']) continue;
       if (!$own && $e['status'] !== 'published') continue;
       $sold_out = true;
-      foreach ($e['tiers'] as $t) { if (self::g($t, 'visibility') === 'private') continue; if ($t['quantity'] - $t['sold'] > 0) { $sold_out = false; break; } }
+      foreach ($e['tiers'] as $t) { if (!self::is_public_tier($t)) continue; if ($t['quantity'] - $t['sold'] > 0) { $sold_out = false; break; } }
       $out[] = array('id' => $e['id'], 'startsAt' => $e['startsAt'], 'endsAt' => $e['endsAt'], 'status' => $e['status'], 'sessionLabel' => (string) self::g($e, 'sessionLabel', ''), 'soldOut' => $sold_out);
     }
     self::sort_starts($out);
@@ -494,7 +497,6 @@ class TJ_Rest {
       if (self::g($t, 'id')) foreach ($oldTiers as $o) if ($o['id'] === $t['id']) { $old = $o; break; }
       if ($old && $quantity < $old['sold']) self::fail(400, '"' . $name . '" already sold ' . $old['sold'] . '; quantity can\'t be lower');
       if ($old && $old['sold'] - (int) self::g($old, 'comped', 0) > 0 && $kind !== self::tier_kind($old)) self::fail(400, '"' . $name . '" has sales; it can\'t be changed between paid, free and donation');
-      if ($old && $old['sold'] - (int) self::g($old, 'comped', 0) > 0 && (float) $price !== (float) $old['price']) self::fail(400, '"' . $name . '" has sales; its ' . ($kind === 'donation' ? 'minimum donation' : 'price') . ' can\'t change');
       $tdesc = self::str(self::g($t, 'description'), 'Description for "' . $name . '"', 300);
       // optional: when this ticket type goes on sale (a countdown shows until then)
       $salesStart = null;
@@ -528,12 +530,14 @@ class TJ_Rest {
         'visibility' => self::g($t, 'visibility') === 'private' ? 'private' : 'public', 'kind' => $kind, 'price' => self::n($price), 'suggested' => $kind === 'donation' && $suggested !== null ? self::n($suggested) : null, 'salesStart' => $salesStart, 'salesEnd' => $salesEnd, 'maxPerPerson' => $maxPerPerson, 'quantity' => (int) $quantity,
         'sold' => $old ? (int) $old['sold'] : 0, 'comped' => $old ? (int) self::g($old, 'comped', 0) : 0,
       );
+      if (!empty($t['cancelled'])) $tiers[count($tiers) - 1]['cancelled'] = true;
     }
     foreach ($oldTiers as $o) {
       if ($o['sold'] > 0) {
         $kept = false;
         foreach ($tiers as $t) if ($t['id'] === $o['id']) $kept = true;
-        if (!$kept) self::fail(400, '"' . $o['name'] . '" has sales and can\'t be removed');
+        // deleted ticket type with sales: kept out of sight so its sold tickets stay valid and in reports
+        if (!$kept) $tiers[] = array_merge($o, array('cancelled' => true, 'deleted' => true, 'deletedAt' => self::g($o, 'deletedAt') ? $o['deletedAt'] : TJ_Store::now_iso()));
       }
     }
     $bl = self::g($b, 'lat'); $bg = self::g($b, 'lng');
@@ -582,9 +586,8 @@ class TJ_Rest {
     foreach ($ev['tiers'] as $t) {
       $c = (int) self::g($t, 'comped', 0);
       $sold += $t['sold']; $capacity += $t['quantity']; $comped += $c;
-      if (self::tier_kind($t) === 'donation') {
-        foreach ($orders as $o) { if (!empty($o['comp'])) continue; foreach ($o['items'] as $i) if ($i['tierId'] === $t['id']) $revenue += $i['price'] * $i['qty']; }
-      } else $revenue += max(0, $t['sold'] - $c) * $t['price'];
+      // revenue = what buyers actually paid (prices can change after sales start)
+      foreach ($orders as $o) { if (!empty($o['comp'])) continue; foreach ($o['items'] as $i) if ($i['tierId'] === $t['id']) $revenue += $i['price'] * $i['qty']; }
     }
     $checked = 0; $paidOrders = 0; $compOrders = 0;
     foreach ($orders as $o) {
@@ -1094,7 +1097,7 @@ class TJ_Rest {
       if (!self::is_integer_num($qty) || $qty < 0 || $qty > 100) self::fail(400, 'You can buy up to 100 of each ticket type');
       $ti = null;
       foreach ($ev['tiers'] as $k => $t) if ($t['id'] === self::g($it, 'tierId') && self::is_public_tier($t)) { $ti = $k; break; }
-      if ($ti === null) self::fail(400, 'Unknown ticket type');
+      if ($ti === null) { $gone = false; foreach ($ev['tiers'] as $t) if ($t['id'] === self::g($it, 'tierId') && (!empty($t['cancelled']) || !empty($t['deleted']))) $gone = true; self::fail(400, $gone ? 'This ticket type is no longer on sale' : 'Unknown ticket type'); }
       $tier = $ev['tiers'][$ti];
       if ($tier['quantity'] - $tier['sold'] < $qty) self::fail(409, 'Only ' . ($tier['quantity'] - $tier['sold']) . ' "' . $tier['name'] . '" tickets left');
       $mpp = (int) self::g($tier, 'maxPerPerson', 0);
@@ -1188,7 +1191,7 @@ class TJ_Rest {
       $ev = self::owned_event($user, $c['params']['id']);
       if ($ev['status'] === 'cancelled') self::fail(400, 'This event is cancelled');
       $ti = null;
-      foreach ($ev['tiers'] as $k => $t) if ($t['id'] === self::g($body, 'tierId')) { $ti = $k; break; }
+      foreach ($ev['tiers'] as $k => $t) if ($t['id'] === self::g($body, 'tierId') && empty($t['deleted'])) { $ti = $k; break; }
       if ($ti === null) self::fail(400, 'Choose a ticket type');
       $tier = $ev['tiers'][$ti];
       $qty = self::numk($body, 'qty');
@@ -1496,6 +1499,46 @@ class TJ_Rest {
     if (!$u) self::fail(404, 'User not found');
     return $u;
   }
+  /** Admin: assign an event (all dates of a recurring series) to a different organizer account */
+  public static function r_admin_event_assign($c) {
+    $admin = self::require_admin();
+    $ev = TJ_Store::get_event((string) $c['params']['id']);
+    if (!$ev) self::fail(404, 'Event not found');
+    $oid = self::g($c['body'], 'organizerId');
+    $to = is_numeric($oid) ? TJ_Store::user_by_id((int) $oid) : null;
+    if (!$to) self::fail(400, 'Choose an organizer');
+    if ($to['role'] !== 'organizer' && $to['role'] !== 'admin') self::fail(400, 'Events can only be assigned to organizer or administrator accounts');
+    if (!empty($to['suspended'])) self::fail(400, 'That account is suspended');
+    if ((int) $to['id'] === (int) $ev['organizerId']) self::fail(400, 'This event already belongs to that organizer');
+    $from = TJ_Store::user_by_id((int) $ev['organizerId']);
+    $fromName = $from ? ($from['organization'] ? $from['organization'] : $from['name']) : '';
+    $toName = $to['organization'] ? $to['organization'] : $to['name'];
+    $list = array();
+    if (self::g($ev, 'seriesId')) { foreach (TJ_Store::events() as $e) if (self::g($e, 'seriesId') === $ev['seriesId'] && (int) $e['organizerId'] === (int) $ev['organizerId']) $list[] = $e; }
+    else $list[] = $ev;
+    $now = TJ_Store::now_iso();
+    foreach ($list as $e) {
+      $e['organizerId'] = (int) $to['id'];
+      $names = TJ_Directory::event_organizers($e);
+      $sw = array();
+      foreach ($names ? $names : array($toName) as $n) { $n2 = TJ_Directory::norm($n) === TJ_Directory::norm($fromName) ? $toName : $n; if (!in_array($n2, $sw, true)) $sw[] = $n2; }
+      $e['organizers'] = $sw;
+      $e['organizerName'] = $sw[0];
+      $e['updatedAt'] = $now;
+      TJ_Store::save_event($e);
+    }
+    TJ_Directory::sync_event(TJ_Store::get_event($list[0]['id']), $to);
+    $msgs = array(
+      array($to, 'An event was assigned to you', 'Event assigned to you: ', '"' . $ev['title'] . '" was assigned to your account by a TicketJunkies administrator. You can now edit it, see sales and check guests in.'),
+      array($from, 'An event was moved', 'Event moved: ', '"' . $ev['title'] . '" was moved to another organizer by a TicketJunkies administrator.'),
+    );
+    foreach ($msgs as $m) {
+      list($u, $heading, $subj, $msg) = $m;
+      if ($u && !empty($u['email']) && (int) $u['id'] !== (int) $admin['id']) TJ_Notify::mail($u['email'], $subj . $ev['title'], array('tag' => 'organizer.eventAssigned', 'heading' => $heading, 'preheader' => $msg, 'body' => '<p>' . TJ_Notify::h($msg) . '</p>', 'cta' => array('label' => 'Open dashboard', 'url' => TJ_Notify::site() . '/#/dashboard')));
+    }
+    return array('ok' => true, 'moved' => count($list), 'organizer' => array('id' => (int) $to['id'], 'name' => $toName));
+  }
+
   public static function r_admin_user($c) {
     self::require_admin();
     $u = self::find_user($c['params']['id']);

@@ -1031,7 +1031,7 @@ async function pageEvent(id) {
   function renderPicker() {
     const tiers = ev.tiers.map((t) => {
       if (t.visibility === 'private') return `<div class="tier tier-private">
-        <div><div class="tier-name">🔒 ${esc(t.name)} <span class="badge private">Private</span></div>
+        <div><div class="tier-name">${t.cancelled ? '🚫' : '🔒'} ${esc(t.name)} <span class="badge private">${t.cancelled ? 'Sales cancelled' : 'Private'}</span></div>
           ${t.description ? `<div class="tier-desc">${esc(t.description)}</div>` : ''}
           <div class="muted small">Hidden from the public · ${t.remaining} left · <a href="#/attendees/${esc(ev.id)}">Send complimentary tickets</a></div></div>
       </div>`;
@@ -1263,6 +1263,8 @@ const CARD_LOGOS = {
   mastercard: '<svg viewBox="0 0 64 40" width="64" height="40" role="img" aria-label="Mastercard"><rect width="64" height="40" rx="6" fill="#fff" stroke="#d9dde5"/><circle cx="26" cy="17" r="10" fill="#EB001B"/><circle cx="38" cy="17" r="10" fill="#F79E1B"/><path d="M32 9a10 10 0 0 1 0 16 10 10 0 0 1 0-16z" fill="#FF5F00"/><text x="32" y="35" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="6.2" font-weight="700" fill="#231F20">mastercard</text></svg>',
   amex: '<svg viewBox="0 0 64 40" width="64" height="40" role="img" aria-label="American Express"><rect width="64" height="40" rx="6" fill="#006FCF"/><text x="32" y="18" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="8.6" font-weight="900" fill="#fff" letter-spacing=".3">AMERICAN</text><text x="32" y="29" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="8.6" font-weight="900" fill="#fff" letter-spacing=".3">EXPRESS</text></svg>',
 };
+// green shield with a padlock: "secure payment" logo
+const SECURE_BADGE = '<svg class="sc-shield" viewBox="0 0 48 56" width="44" height="52" aria-hidden="true"><path d="M24 2 4 9v16c0 13.2 8.4 24.6 20 29 11.6-4.4 20-15.8 20-29V9L24 2z" fill="#2f9e44"/><path d="M24 6.3 8 11.9V25c0 10.9 6.7 20.4 16 24.4 9.3-4 16-13.5 16-24.4V11.9L24 6.3z" fill="#84d65f"/><rect x="15" y="25" width="18" height="14" rx="2.5" fill="#12350a"/><path d="M18.5 25v-4a5.5 5.5 0 0 1 11 0v4" fill="none" stroke="#12350a" stroke-width="3"/><circle cx="24" cy="31" r="2" fill="#84d65f"/><rect x="23" y="31" width="2" height="4.5" rx="1" fill="#84d65f"/></svg>';
 function secureCheckoutHtml() {
   const items = [
     ['🔒', 'Secure checkout', 'Your details travel over an encrypted (SSL) connection.'],
@@ -1271,10 +1273,10 @@ function secureCheckoutHtml() {
     ['🎟️', 'Guaranteed tickets', 'Unique QR tickets by email and text, right after you pay.'],
   ];
   return `<section class="secure-checkout" aria-label="Secure payment">
-    <div class="sc-head"><span class="sc-lock" aria-hidden="true">🔒</span> Secure payment</div>
+    <div class="sc-badge">${SECURE_BADGE}<div class="sc-badge-text"><strong>Your purchase is 100% secure</strong><span>Payments are encrypted and protected from start to finish.</span></div></div>
     <div class="sc-items">${items.map(([i, t, d]) => `<div class="sc-item"><span class="sc-ic" aria-hidden="true">${i}</span><div><strong>${t}</strong><span>${d}</span></div></div>`).join('')}</div>
-    <div class="sc-cards" aria-label="We accept Visa, Mastercard and American Express">${CARD_LOGOS.visa}${CARD_LOGOS.mastercard}${CARD_LOGOS.amex}</div>
-    <div class="sc-note">We accept Visa, Mastercard and American Express</div>
+    <div class="sc-accept">We accept these cards</div>
+    <div class="sc-cards" role="img" aria-label="We accept Visa, Mastercard and American Express">${CARD_LOGOS.visa}${CARD_LOGOS.mastercard}${CARD_LOGOS.amex}</div>
   </section>`;
 }
 
@@ -1792,7 +1794,7 @@ async function pageEventForm(id) {
   const v = ev || { title: '', category: META.categories[0], description: '', startsAt: def.toISOString(), endsAt: defEnd.toISOString(), venue: '', address: '', city: '', imageUrl: '', status: 'published', tiers: [{ name: 'General Admission', price: 25, quantity: 100, sold: 0 }] };
   const isoToLocalInput = (iso) => { if (!iso) return ''; const d = new Date(iso); if (isNaN(d)) return ''; const z = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; };
   const splitLocal = (iso) => { const v2 = isoToLocalInput(iso); return v2 ? v2.split('T') : ['', '']; };
-  let tiers = v.tiers.map((t) => { const [ssDate, ssTime] = splitLocal(t.salesStart), [seDate, seTime] = splitLocal(t.salesEnd); return { ...t, kind: tierKindOf(t), suggested: t.suggested ?? '', ssDate, ssTime, seDate, seTime }; });
+  let tiers = v.tiers.filter((t) => !t.deleted).map((t) => { const [ssDate, ssTime] = splitLocal(t.salesStart), [seDate, seTime] = splitLocal(t.salesEnd); return { ...t, kind: tierKindOf(t), suggested: t.suggested ?? '', ssDate, ssTime, seDate, seTime }; });
   // date + time boxes → ISO (start time defaults to 12:00 AM, end time to 11:59 PM)
   const joinLocal = (d, tm, dflt) => (d ? new Date(`${d}T${tm || dflt}`).toISOString() : null);
   let imageUrl = v.imageUrl;
@@ -2037,20 +2039,24 @@ async function pageEventForm(id) {
   };
   const renderTiers = () => {
     document.getElementById('tiers').innerHTML = tiers.map((t, i) => `
-      <div class="tier-row">
+      <div class="tier-row${t.cancelled ? ' tier-cancelled' : ''}">
         <div class="field"><label>Ticket name</label><input data-k="name" value="${esc(t.name)}" placeholder="e.g. VIP" required /></div>
         <div class="field"><label>Ticket type</label><select data-k="kind" ${t.sold ? 'disabled title="Locked after sales"' : ''}>
           <option value="paid" ${tierKindOf(t) === 'paid' ? 'selected' : ''}>💵 Paid</option>
           <option value="free" ${tierKindOf(t) === 'free' ? 'selected' : ''}>🎁 Free</option>
           <option value="donation" ${tierKindOf(t) === 'donation' ? 'selected' : ''}>💝 Donation</option></select></div>
-        <div class="field ${tierKindOf(t) === 'free' ? 'hidden' : ''}" data-f="price"><label>${tierKindOf(t) === 'donation' ? 'Minimum donation ($)' : 'Price ($)'}</label><input data-k="price" type="number" min="${tierKindOf(t) === 'paid' ? '0.01' : '0'}" step="0.01" value="${esc(tierKindOf(t) === 'free' ? 0 : t.price)}" ${t.sold ? 'readonly title="Price locked after sales"' : ''} ${tierKindOf(t) === 'free' ? '' : 'required'} /></div>
+        <div class="field ${tierKindOf(t) === 'free' ? 'hidden' : ''}" data-f="price"><label>${tierKindOf(t) === 'donation' ? 'Minimum donation ($)' : 'Price ($)'}</label><input data-k="price" type="number" min="${tierKindOf(t) === 'paid' ? '0.01' : '0'}" step="0.01" value="${esc(tierKindOf(t) === 'free' ? 0 : t.price)}" ${t.sold ? 'title="New price applies to new buyers. People who already bought keep the price they paid."' : ''} ${tierKindOf(t) === 'free' ? '' : 'required'} /></div>
         <div class="field ${tierKindOf(t) === 'donation' ? '' : 'hidden'}" data-f="suggested"><label>Suggested ($) <span class="muted small">(optional)</span></label><input data-k="suggested" type="number" min="0" step="0.01" value="${esc(t.suggested ?? '')}" placeholder="e.g. 20" /></div>
         <div class="field"><label>Quantity${t.sold ? ` <span class="muted small">(${t.sold} used)</span>` : ''}</label><input data-k="quantity" type="number" min="${t.sold || 1}" step="1" value="${esc(t.quantity)}" required /></div>
         <div class="field"><label>Max per person <span class="muted small">(optional)</span></label><input data-k="maxPerPerson" type="number" min="1" max="100" step="1" value="${esc(t.maxPerPerson ?? '')}" placeholder="No limit" title="Most tickets of this type one person can buy (1–100). Empty = up to 10 per order." /></div>
         <div class="field"><label>Visibility</label><select data-k="visibility">
           <option value="public" ${t.visibility !== 'private' ? 'selected' : ''}>🌐 Public — on sale</option>
           <option value="private" ${t.visibility === 'private' ? 'selected' : ''}>🔒 Private — hidden</option></select></div>
-        <button type="button" class="btn btn-danger btn-sm" data-rm="${i}" ${t.sold || tiers.length === 1 ? 'disabled' : ''}>✕</button>
+        <div class="tier-actions">
+          ${t.id ? `<button type="button" class="btn btn-ghost btn-sm" data-cancel="${i}" title="${t.cancelled ? 'Put this ticket back on sale' : 'Stop selling this ticket (tickets already sold stay valid)'}">${t.cancelled ? '↺ Resume sales' : '🚫 Cancel'}</button>` : ''}
+          <button type="button" class="btn btn-danger btn-sm" data-rm="${i}" ${tiers.length === 1 ? 'disabled title="An event needs at least one ticket type"' : 'title="Delete this ticket type"'}>🗑 Delete</button>
+        </div>
+        ${t.cancelled ? '<div class="tier-cancel-note">🚫 <strong>Sales cancelled</strong> — buyers can\'t see or buy this ticket. Tickets already sold stay valid. Click <em>Resume sales</em> to sell it again.</div>' : ''}
         <div class="field tier-sale-field"><label>Ticket sales window <span class="muted small">(optional)</span></label>
           <div class="sale-grid">
             <label><span>Sales start date</span><input data-k="ssDate" type="date" value="${esc(t.ssDate || '')}" /></label>
@@ -2061,7 +2067,20 @@ async function pageEventForm(id) {
           <span class="muted small">Leave empty to sell from now until the event ends. Buyers see "On sale in…" before the start and "Sales end in…" while it's selling.</span></div>
         <div class="field tier-desc-field"><label>Description <span class="muted small">(optional)</span></label><input data-k="description" maxlength="300" value="${esc(t.description || '')}" placeholder="e.g. Includes 1 free drink and fast-track entry" /></div>
       </div>`).join('');
-    document.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => { syncTiers(); tiers.splice(Number(b.dataset.rm), 1); renderTiers(); }));
+    document.querySelectorAll('[data-rm]').forEach((b) => (b.onclick = () => {
+      syncTiers();
+      const t = tiers[Number(b.dataset.rm)];
+      if (t.sold && !confirm(`Delete "${t.name}"?\n\n${t.sold} ticket${t.sold === 1 ? ' was' : 's were'} already issued. Those tickets stay valid and stay in your reports; refunds can be made from Orders.\n\nThis ticket type will be removed from sale and from the event page when you save.`)) return;
+      tiers.splice(Number(b.dataset.rm), 1); renderTiers();
+      if (t.id) toast('Ticket type removed — click Save to apply');
+    }));
+    document.querySelectorAll('[data-cancel]').forEach((b) => (b.onclick = () => {
+      syncTiers();
+      const t = tiers[Number(b.dataset.cancel)];
+      if (!t.cancelled && !confirm(`Cancel sales for "${t.name}"?\n\nBuyers won't see or be able to buy it. ${t.sold ? 'Tickets already sold stay valid. ' : ''}You can resume sales any time.`)) return;
+      t.cancelled = !t.cancelled; renderTiers();
+      toast(t.cancelled ? 'Sales cancelled — click Save to apply' : 'Back on sale — click Save to apply');
+    }));
     document.querySelectorAll('.tier-row [data-k=kind]').forEach((s) => (s.onchange = () => {
       syncTiers();
       const i = [...document.querySelectorAll('.tier-row')].indexOf(s.closest('.tier-row'));
@@ -2208,7 +2227,7 @@ async function pageEventForm(id) {
       ...f, ...extra, imageUrl, imageShareUrl, lat: geo.lat, lng: geo.lng, geoPrecision: geo.geoPrecision,
       startsAt: new Date(f.startsAt).toISOString(), endsAt: new Date(f.endsAt).toISOString(),
       tiers: tiers.map((t) => ({ id: t.id, name: t.name, kind: t.kind || 'paid', price: t.kind === 'free' ? 0 : Number(t.price), suggested: t.kind === 'donation' && t.suggested !== '' && t.suggested !== null && t.suggested !== undefined ? Number(t.suggested) : null,
-        salesStart: joinLocal(t.ssDate, t.ssTime, '00:00'), salesEnd: joinLocal(t.seDate, t.seTime, '23:59'), maxPerPerson: t.maxPerPerson !== '' && t.maxPerPerson !== null && t.maxPerPerson !== undefined ? Number(t.maxPerPerson) : null, quantity: Number(t.quantity), description: t.description || '', visibility: t.visibility === 'private' ? 'private' : 'public' })),
+        salesStart: joinLocal(t.ssDate, t.ssTime, '00:00'), salesEnd: joinLocal(t.seDate, t.seTime, '23:59'), maxPerPerson: t.maxPerPerson !== '' && t.maxPerPerson !== null && t.maxPerPerson !== undefined ? Number(t.maxPerPerson) : null, quantity: Number(t.quantity), description: t.description || '', visibility: t.visibility === 'private' ? 'private' : 'public', cancelled: !!t.cancelled })),
     };
     const btn = document.getElementById('saveBtn'); btn.disabled = true;
     try {
@@ -2581,6 +2600,13 @@ async function adminUserDetail(id) {
   adminShell('users', '<div class="loading">Loading…</div>');
   const { user: u, orders, events } = await api('/api/admin/users/' + encodeURIComponent(id));
   const self = u.id === me.id;
+  // other organizer / admin accounts an event can be assigned to
+  let orgOptions = '';
+  if (events.length) {
+    const [o1, o2] = await Promise.all([api('/api/admin/users?role=organizer'), api('/api/admin/users?role=admin')].map((p) => p.catch(() => ({ users: [] }))));
+    orgOptions = [...o1.users, ...o2.users].filter((x) => x.id !== u.id && !x.suspended).sort((a, b) => (a.organization || a.name).localeCompare(b.organization || b.name))
+      .map((x) => `<option value="${esc(x.id)}">${esc(x.organization || x.name)}${x.organization ? ` (${esc(x.name)})` : ''}${x.role === 'admin' ? ' · admin' : ''}</option>`).join('');
+  }
   document.getElementById('adminBody').innerHTML = `
     <a href="#/admin/users" class="small">← All users</a>
     <div class="admin-user-head">
@@ -2622,7 +2648,16 @@ async function adminUserDetail(id) {
     <div class="section-head"><h2>Ticket orders</h2></div>
     ${ordersTable(orders)}
     ${events.length || u.role !== 'user' ? `<div class="section-head" style="margin-top:26px"><h2>Events posted</h2></div>
-    ${events.length ? `<div class="table-wrap"><table><thead><tr><th>Event</th><th>Status</th><th>Sold</th><th>Revenue</th><th></th></tr></thead><tbody>${events.map((e) => `<tr><td><a href="#/event/${esc(e.id)}"><strong>${esc(e.title)}</strong></a><div class="muted small">${esc(fmtShort(e.startsAt))}</div></td><td><span class="badge ${esc(e.status)}">${esc(e.status)}</span></td><td>${e.stats.sold} / ${e.stats.capacity}</td><td>${money(e.stats.revenue)}</td><td><div class="actions"><a class="btn btn-ghost btn-sm" href="#/edit/${esc(e.id)}">Edit</a><a class="btn btn-ghost btn-sm" href="#/attendees/${esc(e.id)}">Attendees</a></div></td></tr>`).join('')}</tbody></table></div>` : '<div class="empty"><h3>No events yet</h3></div>'}` : ''}`;
+    ${events.length ? `<div class="table-wrap"><table><thead><tr><th>Event</th><th>Status</th><th>Sold</th><th>Revenue</th><th></th></tr></thead><tbody>${events.map((e) => `<tr><td><a href="#/event/${esc(e.id)}"><strong>${esc(e.title)}</strong></a><div class="muted small">${esc(fmtShort(e.startsAt))}</div></td><td><span class="badge ${esc(e.status)}">${esc(e.status)}</span></td><td>${e.stats.sold} / ${e.stats.capacity}</td><td>${money(e.stats.revenue)}</td><td><div class="actions"><a class="btn btn-ghost btn-sm" href="#/edit/${esc(e.id)}">Edit</a><a class="btn btn-ghost btn-sm" href="#/attendees/${esc(e.id)}">Attendees</a></div>${orgOptions ? `<div class="assign-row"><select data-assign-sel="${esc(e.id)}" aria-label="Assign ${esc(e.title)} to another organizer"><option value="">Assign to organizer…</option>${orgOptions}</select><button type="button" class="btn btn-blue btn-sm" data-assign="${esc(e.id)}" data-title="${esc(e.title)}" data-series="${e.seriesId ? 1 : ''}">Assign</button></div>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty"><h3>No events yet</h3></div>'}` : ''}`;
+  document.querySelectorAll('[data-assign]').forEach((b) => (b.onclick = async () => {
+    const sel = document.querySelector(`[data-assign-sel="${b.dataset.assign}"]`);
+    if (!sel.value) { toast('Choose an organizer first', true); sel.focus(); return; }
+    const who = sel.options[sel.selectedIndex].text;
+    if (!confirm(`Assign "${b.dataset.title}" to ${who}?${b.dataset.series ? '\n\nAll dates of this recurring event move together.' : ''}\n\nThey will manage the event, its sales and check-in from now on.`)) return;
+    b.disabled = true;
+    try { const r = await api('/api/admin/events/' + encodeURIComponent(b.dataset.assign) + '/assign', { method: 'POST', body: { organizerId: sel.value } }); toast(`Event assigned to ${r.organizer.name}${r.moved > 1 ? ` (${r.moved} dates)` : ''}`); adminUserDetail(id); }
+    catch (err) { toast(err.message, true); b.disabled = false; }
+  }));
   bindRefunds(() => adminUserDetail(id));
   document.getElementById('uForm').onsubmit = async (e) => {
     e.preventDefault();
