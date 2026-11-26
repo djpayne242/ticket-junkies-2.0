@@ -511,7 +511,7 @@ html { -webkit-text-size-adjust: 100%; }
   .tj-root .sticky { position: static; }
   .tj-root .nav { max-height: calc(100vh - 70px); overflow-y: auto; box-shadow: 0 12px 24px rgba(0,0,0,.12); }
   .tj-root .nav a, .tj-root .nav button.link { padding: 12px 14px; font-size: 1rem; }
-  .tj-root .nav a.btn-primary, .tj-root .nav a.admin-link, .tj-root .nav a.tickets-link { margin: 4px 0; text-align: center; }
+  .tj-root .nav a.btn-primary, .tj-root .nav a.admin-link, .tj-root .nav a.tickets-link, .tj-root .nav a.events-link { margin: 4px 0; text-align: center; }
 }
 
 /* phones */
@@ -1357,10 +1357,13 @@ html[data-theme="dark"] .tj-root .area-gps { color: #8fb6ec; }
 .tj-root .sc-note { margin-top: 8px; font-size: .8rem; color: var(--muted); }
 @media (max-width: 640px) { .tj-root .sc-items { grid-template-columns: 1fr; } }
 
-/* My Tickets / My Dashboard menu link in a TicketJunkies-green box */
-.tj-root .nav a.tickets-link, .tj-root .nav a.tickets-link.active { background: #84d65f; color: #12161f; padding: 8px 14px; margin-left: 6px; }
-.tj-root .nav a.tickets-link:hover { background: #6fc04b; color: #12161f; }
-@media (max-width: 1000px) { .tj-root .nav a.tickets-link, .tj-root .nav a.tickets-link.active { margin: 4px 0; padding: 12px 14px; text-align: center; } }
+/* My Events menu link in a TicketJunkies-green box */
+.tj-root .nav a.events-link, .tj-root .nav a.events-link.active { background: #84d65f; color: #12161f; padding: 8px 14px; margin-left: 6px; }
+.tj-root .nav a.events-link:hover { background: #6fc04b; color: #12161f; }
+/* My Tickets / My Dashboard menu link in a white box */
+.tj-root .nav a.tickets-link, .tj-root .nav a.tickets-link.active { background: #fff; color: #12161f; border: 1px solid #d5dae3; padding: 8px 14px; margin-left: 6px; }
+.tj-root .nav a.tickets-link:hover { background: #f1f3f7; color: #12161f; }
+@media (max-width: 1000px) { .tj-root .nav a.tickets-link, .tj-root .nav a.tickets-link.active, .tj-root .nav a.events-link, .tj-root .nav a.events-link.active { margin: 4px 0; padding: 12px 14px; text-align: center; } }
 
 
 /* =========================================================

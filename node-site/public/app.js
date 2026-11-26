@@ -381,10 +381,10 @@ function renderNav() {
     html += link('#/register?role=organizer', 'Sell Tickets') + link('#/login', 'Log In') + `<a href="#/register" class="btn btn-primary btn-sm" style="color:#fff">Sign Up</a>`;
   } else {
     if (me.role === 'admin') html += `<a href="#/admin" class="btn btn-blue btn-sm admin-link" style="color:#fff">⚙ Admin Panel</a>`;
-    if (me.role === 'organizer' || me.role === 'admin') html += link('#/dashboard', 'My Events') + link('#/scan', '📷 Ticket Scanner') + `<a href="#/create" class="btn btn-primary btn-sm" style="color:#fff">+ Create Event</a>`;
+    if (me.role === 'organizer' || me.role === 'admin') html += `<a href="#/dashboard" class="btn btn-green btn-sm events-link${h.startsWith('#/dashboard') ? ' active' : ''}">My Events</a>` + link('#/scan', '📷 Ticket Scanner') + `<a href="#/create" class="btn btn-primary btn-sm" style="color:#fff">+ Create Event</a>`;
     if (me.role === 'organizer' || me.role === 'admin') { const rh = me.role === 'admin' ? '#/admin/reports' : '#/reports'; html += `<a href="${rh}" class="${h.startsWith(rh) ? 'active' : ''}">📈 Reports</a>`; }
-    // My Tickets / My Dashboard sits in a TicketJunkies-green box, like the blue Admin Panel and orange Create Event buttons
-    html += `<a href="#/tickets" class="btn btn-green btn-sm tickets-link${h.startsWith('#/tickets') ? ' active' : ''}">${me.role === 'user' ? '🎟️ My Dashboard' : '🎟️ My Tickets'}</a>`;
+    // My Events sits in a TicketJunkies-green box; My Tickets / My Dashboard sits in a white box
+    html += `<a href="#/tickets" class="btn btn-sm tickets-link${h.startsWith('#/tickets') ? ' active' : ''}">${me.role === 'user' ? '🎟️ My Dashboard' : '🎟️ My Tickets'}</a>`;
     html += `<span class="who">${esc(me.name)}<span class="role-pill ${me.role}">${ROLE_LABEL[me.role]}</span></span>`;
     html += `<button class="link" id="logoutBtn">Log Out</button>`;
   }

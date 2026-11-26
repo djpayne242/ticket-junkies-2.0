@@ -20,6 +20,10 @@ TicketJunkies 2.0 is the fresh home for the project. It starts from everything t
 - **Includes v1.3.7 and v1.3.8** (not yet on the live site, which runs 1.3.6): weather, map, events and calendar follow the visitor's location; secure payment section with Visa / Mastercard / Amex logos; My Tickets / My Dashboard menu link in a green box.
 - Everything else (ticket scanner, shopping cart, organizer and admin dashboards, mobile app) is carried over unchanged.
 
+## What's new in 2.0.1
+- **My Events** in the menu (organizers and admins) now sits in a TicketJunkies-green box.
+- **My Tickets / My Dashboard** in the menu now sits in a white box.
+
 ## Put it on WordPress (the short version)
 1. Install the free **Elementor** plugin and the **Hello Elementor** theme.
 2. Download [`dist/ticketjunkies-wordpress-plugin.zip`](dist/ticketjunkies-wordpress-plugin.zip). In WordPress, go to **Plugins → Add New → Upload Plugin**, choose the zip, and click **Activate**.
