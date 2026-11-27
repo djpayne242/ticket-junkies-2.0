@@ -2,6 +2,17 @@
 // TJ_CONFIG is printed by the plugin: REST base, nonce, page URLs, asset URL.
 const TJ = Object.assign({ rest: '/wp-json/tj/v1/', nonce: '', home: '/', assets: '', pages: {}, editor: false }, window.TJ_CONFIG || {});
 let tjBooted = false;
+// True inside the Elementor editor's preview: the page must never move to another page there,
+// otherwise the editor ends up showing (and editing) a different page.
+const TJ_EDITING = !!TJ.editor || /[?&]elementor-preview=/.test(location.search) || !!(window.elementorFrontend && elementorFrontend.isEditMode && elementorFrontend.isEditMode());
+const TJ_PAGE_LABEL = { home: 'Home', event: 'Event', checkout: 'Ticket Cart', tickets: 'My Dashboard', organizer: 'Organizer Dashboard', scanner: 'Ticket Scanner', admin: 'Admin Panel', login: 'Log In', register: 'Create Account', ticket: 'Your Tickets' };
+// Editor preview: instead of leaving the page, explain where the live site would go
+function tjEditorStay(hash) {
+  const label = TJ_PAGE_LABEL[tjPageOf(hash)] || 'another page';
+  const note = `<div class="notice" style="margin:12px 0">✏️ <strong>Elementor preview.</strong> On the live site this step opens the <strong>${label}</strong> page. You are still editing this page.</div>`;
+  const el = TJ_SCREEN && TJ_SCREEN.el;
+  if (el && (!el.textContent.trim() || el.querySelector('.loading'))) el.innerHTML = note;
+}
 // Which WordPress page shows each part of the app. Keys of TJ.pages: home, event, checkout, tickets, organizer, admin, login, register, ticket
 const TJ_ROUTE_PAGE = { '': 'home', event: 'event', checkout: 'checkout', cart: 'checkout', order: 'checkout', tickets: 'tickets', dashboard: 'organizer', create: 'organizer', edit: 'organizer', attendees: 'organizer', reports: 'organizer', admin: 'admin', login: 'login', register: 'register', t: 'ticket', scan: 'scanner', app: 'tickets' };
 const tjSeg = (hash) => String(hash || '').replace(/^#?\/?/, '').split(/[/?]/)[0];
@@ -25,7 +36,8 @@ let TJ_SCREEN = null;
 const TJ_SCREEN_DEFAULT = {
   home: () => '#/',
   event: () => { const id = new URLSearchParams(location.search).get('id'); return id ? '#/event/' + id : (TJ.sampleEvent ? '#/event/' + TJ.sampleEvent : '#/event/'); },
-  checkout: () => { try { const c = JSON.parse(sessionStorage.getItem('tj_cart') || 'null'); if (c && c.id) return '#/checkout/' + c.id; } catch {} return TJ.sampleEvent ? '#/checkout/' + TJ.sampleEvent : '#/checkout/'; },
+  // the Ticket Cart page shows the cart (the old "#/checkout/<event>" address forwarded to the event page)
+  checkout: () => '#/cart',
   tickets: () => '#/tickets', organizer: () => '#/dashboard', scanner: () => '#/scan', admin: () => '#/admin', login: () => '#/login', register: () => '#/register', ticket: () => '#/t',
 };
 function tjScreenAllows(hash) { return !!TJ_SCREEN && tjPageOf(hash) === TJ_SCREEN.key; }
@@ -37,6 +49,7 @@ function tjCurrentRoute() {
 function tjGo(hash) {
   hash = '#/' + String(hash || '').replace(/^#?\/?/, '');
   if (tjScreenAllows(hash)) { if (location.hash === hash) route(); else location.hash = hash; return; }
+  if (TJ_EDITING) { tjEditorStay(hash); return; }
   location.href = tjRouteUrl(hash);
 }
 // Links written as "#/..." are rewritten to the right page (so "open in new tab" works too)

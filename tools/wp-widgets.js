@@ -10,7 +10,7 @@ function tjEvents(params) {
 }
 const tjOpts = (el) => { try { return JSON.parse(el.getAttribute('data-tj-opts') || '{}'); } catch { return {}; } };
 const tjHomeUrl = (params) => { const s = searchParams(searchValues(params)).toString(); return (TJ.pages.home || TJ.home) + (s ? '?' + s : ''); };
-const tjGoSearch = (p) => { const s = p.toString(); location.href = (TJ.pages.home || TJ.home) + (s ? '?' + s : ''); };
+const tjGoSearch = (p) => { if (TJ_EDITING) return; const s = p.toString(); location.href = (TJ.pages.home || TJ.home) + (s ? '?' + s : ''); };
 
 const TJ_WIDGETS = {
   // Full routed screens (event page, checkout, dashboards, admin …)

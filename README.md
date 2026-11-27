@@ -20,6 +20,11 @@ TicketJunkies 2.0 is the fresh home for the project. It starts from everything t
 - **Includes v1.3.7 and v1.3.8** (not yet on the live site, which runs 1.3.6): weather, map, events and calendar follow the visitor's location; secure payment section with Visa / Mastercard / Amex logos; My Tickets / My Dashboard menu link in a green box.
 - Everything else (ticket scanner, shopping cart, organizer and admin dashboards, mobile app) is carried over unchanged.
 
+## What's new in 2.0.9 — Elementor stays on the page you're editing
+- **Editing a page with Elementor no longer jumps to the Event page.** In the editor's preview, the TicketJunkies screen on a page could send the preview somewhere else. The Ticket Cart page, for example, opened a sample event and ended up on the Event page, so Elementor showed the wrong page. While Elementor is editing, TicketJunkies now never leaves the page. If a step would normally open another page, the preview shows a short note instead (for example "On the live site this step opens the Event page").
+- **The Ticket Cart page opens the cart.** Visiting `/ticket-cart/` directly now shows the cart instead of forwarding to an event.
+- **No sign-outs while you edit.** The "signed out after being away" timer is paused inside the Elementor editor, because you work in the editor panel and not in the page itself.
+
 ## What's new in 2.0.8 — "Go to Cart" works again
 - **Tickets go into the cart again.** The cart lives on the TicketJunkies **Checkout** page. On the live site that page had been unpublished, and a WooCommerce page called "Checkout" had taken its address (`/checkout/`). **Go to Cart** therefore had nowhere to go: it landed on the home page and the tickets never showed up in a cart.
 - **The cart page now repairs itself.** It is called **Ticket Cart** and has its own address, `/ticket-cart/`, so it can't clash with WooCommerce's own Checkout page again. If it is ever deleted, unpublished or taken over by WooCommerce, the plugin rebuilds it automatically and shows a note in the dashboard. The Event page is protected the same way.

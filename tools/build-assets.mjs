@@ -80,7 +80,9 @@ app = patch(app, [
   ["const raw = (location.hash || '#/').slice(1);", 'const raw = tjCurrentRoute().slice(1);'],
   [/encodeURIComponent\(location\.hash\)/g, 'encodeURIComponent(tjCurrentRoute())'],
   // router: only runs inside a TicketJunkies "screen" widget, and sends routes that belong elsewhere to the right page
-  ['async function route() {\n', 'async function route() {\n  if (!TJ_SCREEN) return;\n  $app = TJ_SCREEN.el;\n  if (!tjScreenAllows(tjCurrentRoute())) { location.href = tjRouteUrl(tjCurrentRoute()); return; }\n'],
+  ['async function route() {\n', 'async function route() {\n  if (!TJ_SCREEN) return;\n  $app = TJ_SCREEN.el;\n  if (!tjScreenAllows(tjCurrentRoute())) { if (TJ_EDITING) { tjEditorStay(tjCurrentRoute()); return; } location.href = tjRouteUrl(tjCurrentRoute()); return; }\n'],
+  // Elementor editor: never sign the editor out for "inactivity" (you work in the editor panel, not the preview)
+  ['if (!me || !mins) { if (warned) hideWarn(); return; }', 'if (!me || !mins || TJ_EDITING) { if (warned) hideWarn(); return; }'],
   ['  $nav.classList.remove(\'open\');\n  renderNav();\n  window.scrollTo(0, 0);', "  $nav.classList.remove('open');\n  renderNav();\n  if (TJ_SCREEN.routed) TJ_SCREEN.el.scrollIntoView({ block: 'start' }); TJ_SCREEN.routed = true;"],
   // URLs that pointed at the standalone server
   [/(src|href)="\/qr\//g, '$1="${TJ.rest}qr/'],
