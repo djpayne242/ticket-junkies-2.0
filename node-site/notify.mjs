@@ -88,7 +88,7 @@ export function createNotifier({ getSettings, getLog, save, getContext = () => (
   }
 
   // Fire-and-forget so a slow provider never delays the website.
-  // The sandbox context (test flag + order ref) is captured at call time, before the async hop.
+  // Any message context (from getContext) is captured at call time, before the async hop.
   const email = (msg) => { const m = { ...msg, ...getContext() }; setImmediate(() => deliverEmail(m).catch((e) => console.error(e))); };
   const sms = (msg) => { const m = { ...msg, ...getContext() }; setImmediate(() => deliverSms(m).catch((e) => console.error(e))); };
   return { email, sms, deliverEmail, deliverSms };

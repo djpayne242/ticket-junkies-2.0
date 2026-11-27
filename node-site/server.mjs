@@ -6,7 +6,6 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import os from 'node:os';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { qrPng, qrSvg, qrMatrix } from './qr.mjs';
@@ -108,6 +107,10 @@ function applyBundledFlyers() {
 
 // Upgrades older databases and guarantees an administrator account exists.
 function migrate() {
+  // The admin Sandbox was removed: clear any simulated test orders and test messages it left behind
+  // (they never counted toward sales or ticket inventory).
+  if (Array.isArray(db.orders) && db.orders.some((o) => o.test)) db.orders = db.orders.filter((o) => !o.test);
+  if (Array.isArray(db.notifications) && db.notifications.some((n) => n.test)) db.notifications = db.notifications.filter((n) => !n.test);
   // "Promoter" was renamed to "Organizer": upgrade older saved data once.
   for (const u of db.users || []) { if (u.role === 'promoter') u.role = 'organizer'; if (u.name === 'Demo Promoter') u.name = 'Demo Organizer'; }
   for (const e of db.events || []) if (e.promoterId !== undefined) { e.organizerId ??= e.promoterId; delete e.promoterId; }
@@ -521,11 +524,8 @@ function orderView(o) {
 }
 
 // ---------- notifications ----------
-// Sandbox context: while set, messages are tagged as tests and staff copies go to the tester.
-let sandboxCtx = null;
 const notifier = createNotifier({
   getSettings: () => db.settings, getLog: () => db.notifications, save: () => saveDb(),
-  getContext: () => (sandboxCtx ? { test: true, ref: sandboxCtx.orderId } : {}),
 });
 const N = () => db.settings.notifications;
 const site = () => N().siteUrl.replace(/\/+$/, '');
@@ -550,15 +550,6 @@ const eventLink = (ev) => `${site()}/#/event/${ev.id}`;
 const evRows = (ev) => [['Event', `<strong>${h(ev.title)}</strong>`], ['When', h(when(ev.startsAt))], ['Where', h([ev.venue, ev.address, ev.city].filter(Boolean).join(', '))]];
 
 function mail(to, subject, { heading, preheader, body, cta, footerNote, tag, attachments }) {
-  if (sandboxCtx) {
-    // Never bother real organizers/admins with test messages: their copies go to the person running the test.
-    if (!String(tag).startsWith('buyer.')) {
-      const role = String(tag).startsWith('admin.') ? 'admin' : 'organizer';
-      body = `<p style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:10px 14px;border-radius:10px;font-size:13px">🧪 Sandbox test — this is the <strong>${role}</strong> copy. In a real sale it goes to ${h([].concat(to).join(', '))}.</p>` + body;
-      to = sandboxCtx.testerEmail;
-    }
-    subject = '[TEST] ' + subject;
-  }
   notifier.email({ to, subject, tag, attachments, html: emailLayout({ siteUrl: site(), heading, preheader, bodyHtml: body, cta, footerNote }), text: `${heading}\n\n${preheader || ''}\n\n${cta ? cta.label + ': ' + cta.url : ''}` });
 }
 function alertAdmin(kind, subject, opts) {
@@ -1541,7 +1532,7 @@ route('GET', '/api/admin/stats', ({ req }) => {
     suspended: db.users.filter((u) => u.suspended).length,
     events: db.events.length,
     liveEvents: db.events.filter((e) => e.status === 'published' && new Date(e.endsAt).getTime() > now).length,
-    orders: paid.length, refunds: db.orders.filter((o) => o.status === 'refunded' && !o.test).length, testOrders: db.orders.filter((o) => o.test).length,
+    orders: paid.length, refunds: db.orders.filter((o) => o.status === 'refunded' && !o.test).length,
     ticketsSold: paid.reduce((a, o) => a + o.tickets.length, 0),
     grossSales: sum('subtotal'), platformFees: sum('fees'), totalCollected: sum('total'),
     recentOrders: [...db.orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8).map(adminOrder),
@@ -1853,7 +1844,7 @@ route('POST', '/api/admin/orders/:id/refund', ({ req, params }) => {
   o.refundedAt = new Date().toISOString();
   saveDb();
   const admin = currentUser(req);
-  withSandbox(o.test ? { orderId: o.id, testerEmail: admin.email } : null, () => Notify.orderRefunded(o));
+  Notify.orderRefunded(o);
   return { order: adminOrder(o) };
 });
 
@@ -2036,90 +2027,18 @@ route('GET', '/api/admin/notifications/:id', ({ req, params }) => {
   return { notification: db.notifications.find((n) => n.id === params.id) || fail(404, 'Message not found') };
 });
 
-// ---------- sandbox (simulated sales for testing) ----------
-function withSandbox(ctx, fn) {
-  const prev = sandboxCtx;
-  sandboxCtx = ctx;
-  try { return fn(); } finally { sandboxCtx = prev; }
-}
-function lanUrls() {
-  const out = [];
-  for (const list of Object.values(os.networkInterfaces())) for (const a of list || []) {
-    if (a.family === 'IPv4' && !a.internal && !a.address.startsWith('169.254.')) out.push(`http://${a.address}:${PORT}`);
-  }
-  return out;
-}
-const providerStatus = () => {
-  const n = N();
-  return { email: !!(n.emailEnabled && n.resendApiKey), sms: !!(n.smsEnabled && n.twilioSid && n.twilioToken && n.twilioFrom), siteUrl: site() };
-};
-
-route('GET', '/api/admin/sandbox', ({ req }) => {
-  requireAdmin(req);
-  const events = db.events.filter((e) => e.status !== 'cancelled').sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt)).map((e) => {
-    const p = organizerOf(e);
-    return { id: e.id, title: e.title, startsAt: e.startsAt, status: e.status, organizer: e.organizerName || p?.organization || p?.name || '', tiers: e.tiers.map((t) => ({ id: t.id, name: t.name, price: t.price })) };
-  });
-  const testOrders = db.orders.filter((o) => o.test).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((o) => ({ ...orderView(o), link: `/#/t/${o.id}/${o.key}` }));
-  return { events, testOrders, providers: providerStatus(), lanUrls: lanUrls() };
-});
-
-route('POST', '/api/admin/sandbox/sale', ({ req, body }) => {
-  const admin = requireAdmin(req);
-  const ev = db.events.find((e) => e.id === body.eventId) || fail(400, 'Choose an event');
-  const tier = ev.tiers.find((t) => t.id === body.tierId) || fail(400, 'Choose a ticket type');
-  const qty = Number(body.qty);
-  if (!Number.isInteger(qty) || qty < 1 || qty > 10) fail(400, 'Quantity must be 1–10');
-  const buyerName = str(body.buyerName, { name: 'Buyer name', max: 80, required: true });
-  const buyerEmail = str(body.buyerEmail, { name: 'Buyer email', max: 160, required: true });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyerEmail)) fail(400, 'Enter a valid email address');
-  const buyerPhone = normalizePhone(body.buyerPhone);
-  if (!buyerPhone) fail(400, 'Enter a valid mobile number for the test text');
-
-  const subtotal = round2(tier.price * qty);
-  const fees = round2(ticketFee(tier.price) * qty);
-  const tickets = Array.from({ length: qty }, () => ({ code: 'TJ-' + crypto.randomBytes(4).toString('hex').toUpperCase(), tierId: tier.id, tierName: tier.name, price: tier.price, checkedIn: false }));
-  const order = {
-    id: newId('ord'), userId: admin.id, eventId: ev.id, test: true,
-    items: [{ tierId: tier.id, tierName: tier.name, price: tier.price, qty }],
-    tickets, buyerName, buyerEmail, buyerPhone, subtotal, fees, total: round2(subtotal + fees),
-    ...(subtotal + fees > 0 ? cardInfo('4242424242424242', buyerName) : { cardLast4: '', cardBrand: '', cardHolder: '', cardFingerprint: '' }), status: 'paid', key: crypto.randomBytes(12).toString('hex'),
-    createdAt: new Date().toISOString(),
-  };
-  // Test orders never change ticket inventory, sales totals or payouts.
-  db.orders.push(order);
-  saveDb();
-  withSandbox({ orderId: order.id, testerEmail: admin.email }, () => Notify.orderPlaced(order, ev));
-  return { order: { ...orderView(order), link: `/#/t/${order.id}/${order.key}` }, providers: providerStatus(), lanUrls: lanUrls() };
-});
-
-route('GET', '/api/admin/sandbox/orders/:id/messages', ({ req, params }) => {
-  requireAdmin(req);
-  return { messages: db.notifications.filter((n) => n.ref === params.id) };
-});
-
-route('DELETE', '/api/admin/sandbox', ({ req }) => {
-  requireAdmin(req);
-  const before = db.orders.length;
-  db.orders = db.orders.filter((o) => !o.test);
-  const removedMsgs = db.notifications.length;
-  db.notifications = db.notifications.filter((n) => !n.test);
-  saveDb();
-  return { removedOrders: before - db.orders.length, removedMessages: removedMsgs - db.notifications.length };
-});
 
 // ---------- sales reports ----------
 function buildReport({ events, query, withCards }) {
   const evIds = new Set(events.map((e) => e.id));
   const eventId = query.get('eventId') || '';
   const status = query.get('status') || 'paid';          // paid | refunded | all
-  const includeTests = query.get('tests') === '1';
   const fromD = query.get('from') ? new Date(query.get('from') + 'T00:00:00') : null;
   const toD = query.get('to') ? new Date(query.get('to') + 'T23:59:59.999') : null;
   const orders = db.orders.filter((o) => evIds.has(o.eventId)
     && (!eventId || o.eventId === eventId)
     && (status === 'all' || (status === 'refunded' ? o.status === 'refunded' : o.status !== 'refunded'))
-    && (includeTests || !o.test)
+    && !o.test
     && (!fromD || new Date(o.createdAt) >= fromD) && (!toD || new Date(o.createdAt) <= toD))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const evById = Object.fromEntries(db.events.map((e) => [e.id, e]));
@@ -2216,7 +2135,7 @@ function buildReport({ events, query, withCards }) {
   });
 
   return {
-    generatedAt: new Date().toISOString(), filters: { eventId, status, from: query.get('from') || '', to: query.get('to') || '', tests: includeTests },
+    generatedAt: new Date().toISOString(), filters: { eventId, status, from: query.get('from') || '', to: query.get('to') || '' },
     events: events.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt })).sort((a, b) => new Date(b.startsAt) - new Date(a.startsAt)),
     summary, byEvent, byDay, byCard, transactions, withCards,
   };
@@ -2245,7 +2164,7 @@ function reportModel(r, sections, who) {
   const s = r.summary;
   const model = {
     title: `Sales Report — ${single ? single.title : 'All Events'}`,
-    subtitle: `${period} · ${statusTxt}${r.filters.tests ? ' · incl. sandbox tests' : ''} · ${who} · generated ${new Date(r.generatedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`,
+    subtitle: `${period} · ${statusTxt} · ${who} · generated ${new Date(r.generatedAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}`,
     meta: [], sections: [],
   };
   if (want('summary')) {
@@ -2282,7 +2201,7 @@ function reportModel(r, sections, who) {
       { label: 'Sale date', width: 14, type: 'date' }, { label: 'Order #', width: 9 }, ...(single ? [] : [{ label: 'Event', width: 18 }]), { label: 'Buyer', width: 14 }, { label: 'Email', width: 20 }, { label: 'Phone', width: 12 },
       ...(r.withCards ? [{ label: 'Card', width: 13 }, { label: 'Name on card', width: 13 }] : []), { label: 'Qty', width: 5, type: 'int' }, { label: 'Ticket types', width: 15 }, { label: 'Ticket codes', width: 16 },
       { label: 'Subtotal', width: 9, type: 'money' }, { label: 'Fees', width: 8, type: 'money' }, { label: 'Total', width: 9, type: 'money' }, { label: 'Status', width: 9 }],
-      rows: r.transactions.map((t) => [t.createdAt, t.ref + (t.test ? ' (test)' : ''), ...(single ? [] : [t.event]), t.buyerName, t.buyerEmail, t.buyerPhone,
+      rows: r.transactions.map((t) => [t.createdAt, t.ref, ...(single ? [] : [t.event]), t.buyerName, t.buyerEmail, t.buyerPhone,
         ...(r.withCards ? [t.cardLast4 ? `${t.cardBrand || 'Card'} •••• ${t.cardLast4}` : 'Free', t.cardHolder] : []), t.qty, t.items.map((i) => `${i.qty}× ${i.name}`).join(', '), t.codes.join(', '),
         t.subtotal, t.fees, t.total, (t.status === 'refunded' ? 'Refunded' : t.comp ? 'Complimentary' : 'Paid')]),
       totals: ['Total', '', ...(single ? [] : ['']), '', '', '', ...(r.withCards ? ['', ''] : []), r.transactions.reduce((a, t) => a + t.qty, 0), '', '',
@@ -2378,7 +2297,7 @@ route('POST', '/api/orders/:id/resend', ({ req, body, params }) => {
   if (recent.length >= 3) fail(429, 'You can resend tickets up to 3 times every 15 minutes. Please try again shortly, or download the PDF.');
   recent.push(now); resendLog.set(o.id, recent);
   const run = () => Notify.orderPlaced(o, ev, { buyerOnly: true, email: channel !== 'sms', sms: channel !== 'email' });
-  if (o.test) withSandbox({ orderId: o.id, testerEmail: user.email }, run); else run();
+  run();
   return { ok: true, sentTo: { email: channel !== 'sms' ? o.buyerEmail : null, sms: channel !== 'email' ? o.buyerPhone : null } };
 });
 
@@ -2547,13 +2466,6 @@ const server = http.createServer(async (req, res) => {
     const png = qr[2] === 'png';
     res.writeHead(200, { 'Content-Type': png ? 'image/png' : 'image/svg+xml', 'Cache-Control': 'public, max-age=31536000, immutable' });
     return res.end(png ? qrPng(qr[1], 10) : qrSvg(qr[1]));
-  }
-  if (url.pathname === '/qr/link.svg') {
-    // QR of a ticket-page link (used by the sandbox to open tickets on a phone)
-    const u = url.searchParams.get('u') || '';
-    if (!/^https?:\/\/[\w.:-]+\/#\/t\/ord_[0-9a-f]+\/[0-9a-f]+$/.test(u) || u.length > 180) { res.writeHead(400); return res.end('Bad link'); }
-    res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'no-store' });
-    return res.end(qrSvg(u));
   }
   const share = /^\/e\/(evt_[0-9a-f]+)\/?$/.exec(url.pathname);
   if (share) return sharePage(req, res, share[1]);

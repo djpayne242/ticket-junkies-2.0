@@ -20,6 +20,11 @@ TicketJunkies 2.0 is the fresh home for the project. It starts from everything t
 - **Includes v1.3.7 and v1.3.8** (not yet on the live site, which runs 1.3.6): weather, map, events and calendar follow the visitor's location; secure payment section with Visa / Mastercard / Amex logos; My Tickets / My Dashboard menu link in a green box.
 - Everything else (ticket scanner, shopping cart, organizer and admin dashboards, mobile app) is carried over unchanged.
 
+## What's new in 2.0.6 — Sandbox removed
+- **The Admin Panel's 🧪 Sandbox tab is gone**, together with everything that belonged to it: simulated test sales, test tickets, "[TEST]" emails and texts sent to the admin, the **Include sandbox tests** option and the test column in sales reports, **Test** badges on orders, attendees and messages, and the phone-link QR code.
+- **Leftover test data is cleaned up automatically:** any old sandbox test orders and test messages are deleted once when you update. They never counted toward sales, payouts or ticket inventory, so your numbers don't change.
+- The **Send test email** and **Send test text** buttons in **Admin → Settings** are kept. They only check that your email and SMS providers work.
+
 ## What's new in 2.0.5 — new ticket buying steps
 Buying tickets now follows five clear steps, shown in a step bar at the top:
 
@@ -81,7 +86,7 @@ The plugin checks this repository's **Releases** for new versions. When a newer 
 - Shows 1, 2 or 3 times a day (Morning, Midday, Evening), on one day, several days, or any mix of days and times. Each show has its own tickets
 - Ticket types (public or private), free tickets, complimentary tickets, fees of 3.5% + $0.99
 - Account required at checkout. QR-code tickets by email and text, PDF ticket downloads, resend tickets
-- Attendee dashboard, organizer dashboard with check-in, and an Admin Panel (users, organizers, venues, events, orders, reports, emails and texts, sandbox, settings)
+- Attendee dashboard, organizer dashboard with check-in, and an Admin Panel (users, organizers, venues, events, orders, reports, emails and texts, settings)
 - Reports with PDF, Word, Excel and CSV downloads
 - Light, dark and automatic themes; works on phones, tablets and computers
 - **Mobile apps:** installable app with offline tickets, the **TJ Scanner** door check-in app (works on iPhone and Android), and App Store / Google Play builds in [`mobile-app`](mobile-app)

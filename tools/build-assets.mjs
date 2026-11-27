@@ -89,8 +89,6 @@ app = patch(app, [
   ['href="/api/tickets/${esc(order.id)}/pdf?k=', 'href="${TJ.rest}tickets/${esc(order.id)}/pdf?k='],
   ["const res = await fetch(`/api/${admin ? 'admin' : 'organizer'}/reports/export?${p}`, { credentials: 'same-origin' });",
    "const res = await fetch(`${TJ.rest}${admin ? 'admin' : 'organizer'}/reports/export?${p}`, { credentials: 'same-origin', headers: { 'X-WP-Nonce': TJ.nonce } });"],
-  ['const localLink = location.origin + order.link;', 'const localLink = tjLink(order.link);'],
-  [/esc\((o|order)\.link\)/g, 'esc(tjLink($1.link))'],
   // modals/toasts live in a body-level TicketJunkies container so they keep the plugin's styles
   [/document\.body\.appendChild\(wrap\)/g, "tjFloat().appendChild(wrap)"],
   [".observe(document.getElementById('app'), { childList: true, subtree: true });", '.observe(document.body, { childList: true, subtree: true });'],

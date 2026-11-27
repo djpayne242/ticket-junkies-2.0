@@ -244,24 +244,6 @@ html, .tj-root { margin: 0; }
 .tj-root .form-section h3 .badge { margin-left: 8px; vertical-align: middle; }
 .tj-root .sms-bubble { background: #e9f0fb; border-radius: 18px 18px 18px 4px; padding: 14px 18px; max-width: 420px; white-space: pre-wrap; font-size: .95rem; }
 
-/* sandbox */
-.tj-root .badge.test { background: #f3e8ff; color: #7e22ce; }
-.tj-root .sandbox-hero { display: flex; gap: 20px; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; background: linear-gradient(120deg, #f5f0ff, #eef9e8); border: 1px solid #e4d7fb; border-radius: 16px; padding: 20px 22px; margin-bottom: 20px; }
-.tj-root .sandbox-hero > div:first-child { flex: 1; min-width: 280px; }
-.tj-root .sandbox-status { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
-.tj-root .sandbox-result h3 { font-size: 1.1rem; }
-.tj-root .sb-tickets { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
-.tj-root .sb-ticket { border: 2px dashed var(--orange); border-radius: 14px; padding: 14px; text-align: center; display: grid; gap: 8px; justify-items: center; }
-.tj-root .sb-ticket img { width: 150px; height: 150px; }
-.tj-root .sb-msgs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 4px; }
-.tj-root .sb-msg { display: grid; gap: 4px; text-align: left; padding: 12px 14px; border-radius: 12px; border: 2px solid var(--line); background: var(--card); cursor: pointer; font-family: inherit; min-width: 190px; }
-.tj-root .sb-msg .badge { justify-self: start; }
-.tj-root .sb-msg.active { border-color: var(--blue); background: #f2f7fd; }
-.tj-root .sb-frame { width: 100%; height: 760px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
-.tj-root .sb-phone-frame { max-width: 380px; margin-top: 12px; padding: 20px 16px; border-radius: 30px; border: 10px solid #1b1f2a; background: var(--card); }
-.tj-root .sb-phone { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
-.tj-root .sb-phone img { width: 170px; height: 170px; border: 1px solid var(--line); border-radius: 12px; flex: none; }
-.tj-root .sb-phone > div { flex: 1; min-width: 260px; }
 .tj-root .sms-bubble { overflow-wrap: anywhere; }
 .tj-root .sms-bubble a { word-break: break-all; }
 
@@ -381,7 +363,7 @@ html { transition: background-color .2s; }
 .tj-root { background: var(--bg); color: var(--ink); }
 
 /* things that must stay white in every theme (QR codes must scan, logos need contrast) */
-.tj-root .stub-qr, .tj-root .share-qr img, .tj-root .sb-phone img, .tj-root .big-ticket img, .tj-root .sb-ticket img, .tj-root .sb-frame, .tj-root #msgFrame { background: #fff !important; }
+.tj-root .stub-qr, .tj-root .share-qr img, .tj-root .big-ticket img, .tj-root #msgFrame { background: #fff !important; }
 
 /* dark-mode adjustments for tinted elements */
 :root[data-theme="dark"] .tj-root .topbar { background: rgba(18, 22, 31, .92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
@@ -397,17 +379,13 @@ html { transition: background-color .2s; }
 :root[data-theme="dark"] .tj-root .badge.draft { background: #2a3142; color: #c7cdd9; }
 :root[data-theme="dark"] .tj-root .badge.cancelled { background: #3a1517; color: #ffb3b0; }
 :root[data-theme="dark"] .tj-root .badge.soldout { background: #e9ecf3; color: #0d1017; }
-:root[data-theme="dark"] .tj-root .badge.test { background: #2e1d47; color: #d6b8ff; }
 :root[data-theme="dark"] .tj-root .role-pill { background: #1c2b44; color: #8fbaf3; }
 :root[data-theme="dark"] .tj-root .role-pill.organizer { background: #3a2412; color: #f6b27d; }
 :root[data-theme="dark"] .tj-root .role-pill.user { background: #1d3316; color: #a6e48a; }
 :root[data-theme="dark"] .tj-root .role-pill.admin { background: #e9ecf3; color: #0d1017; }
 :root[data-theme="dark"] .tj-root .role-opt.selected { background: #2a1d10; }
 :root[data-theme="dark"] .tj-root .promo-band { background: linear-gradient(120deg, #2a1d10, #14260f); border-color: #3d2c1c; }
-:root[data-theme="dark"] .tj-root .sandbox-hero { background: linear-gradient(120deg, #21173a, #14260f); border-color: #33285a; }
-:root[data-theme="dark"] .tj-root .sb-msg.active { background: #1c2b44; }
 :root[data-theme="dark"] .tj-root .sms-bubble { background: #1c2b44; color: var(--ink); }
-:root[data-theme="dark"] .tj-root .sb-phone-frame { border-color: #3a4255; }
 :root[data-theme="dark"] .tj-root .seg button.active { background: var(--chip); color: var(--ink); }
 :root[data-theme="dark"] .tj-root .wx-hour small { color: #7fb0f0; }
 :root[data-theme="dark"] .tj-root .checked { color: #a6e48a; }
@@ -571,9 +549,7 @@ html { -webkit-text-size-adjust: 100%; }
 
   .tj-root .order-head { flex-direction: column; align-items: stretch; }
   .tj-root .order-head .cover { width: 100%; }
-  .tj-root .big-tickets, .tj-root .stubs, .tj-root .sb-tickets { grid-template-columns: 1fr; }
-  .tj-root .sandbox-hero > div:first-child, .tj-root .sb-phone > div { min-width: 0; }
-  .tj-root .sb-msg { min-width: 0; width: 100%; }
+  .tj-root .big-tickets, .tj-root .stubs { grid-template-columns: 1fr; }
   .tj-root .modal { padding: 16px; border-radius: 16px; }
   .tj-root .footer-inner { flex-direction: column; align-items: flex-start; gap: 14px; }
   .tj-root .footer { padding: 26px 0 80px; }

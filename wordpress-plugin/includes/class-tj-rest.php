@@ -163,16 +163,11 @@ class TJ_Rest {
     self::route('POST', '/admin/notifications/test', 'r_admin_notifications_test');
     self::route('GET', '/admin/notifications', 'r_admin_notifications');
     self::route('GET', '/admin/notifications/:id', 'r_admin_notification');
-    self::route('GET', '/admin/sandbox', 'r_sandbox');
-    self::route('POST', '/admin/sandbox/sale', 'r_sandbox_sale');
-    self::route('GET', '/admin/sandbox/orders/:id/messages', 'r_sandbox_messages');
-    self::route('DELETE', '/admin/sandbox', 'r_sandbox_clear');
     self::route('GET', '/admin/reports', 'r_admin_reports');
     self::route('GET', '/admin/reports/export', 'r_admin_export');
     self::route('GET', '/tickets/:id', 'r_ticket_page');
     self::route('GET', '/tickets/:id/pdf', 'r_ticket_pdf');
     // QR images (served at /qr/... in the Node app)
-    self::route('GET', '/qr/link.svg', 'r_qr_link');
     self::route('GET', '/qr/event.svg', 'r_qr_event');
     self::$routes[] = array('GET', '/qr/(?P<code>TJ-[0-9A-Fa-f]{8})\.(?P<ext>png|svg)', 'r_qr_code');
   }
@@ -1235,7 +1230,7 @@ class TJ_Rest {
     $o['status'] = 'refunded';
     $o['refundedAt'] = TJ_Store::now_iso();
     TJ_Store::save_order($o);
-    TJ_Notify::with_sandbox(!empty($o['test']) && $testerEmail ? array('orderId' => $o['id'], 'testerEmail' => $testerEmail) : null, function () use ($o) { TJ_Notify::order_refunded($o); });
+    TJ_Notify::order_refunded($o);
     return $o;
   }
 
@@ -1395,7 +1390,7 @@ class TJ_Rest {
     set_transient($key, $recent, 15 * 60);
     $opts = array('buyerOnly' => true, 'email' => $channel !== 'sms', 'sms' => $channel !== 'email');
     $run = function () use ($o, $ev, $opts) { TJ_Notify::order_placed($o, $ev, $opts); };
-    if (!empty($o['test'])) TJ_Notify::with_sandbox(array('orderId' => $o['id'], 'testerEmail' => $user['email']), $run); else $run();
+    $run();
     return array('ok' => true, 'sentTo' => array('email' => $channel !== 'sms' ? $o['buyerEmail'] : null, 'sms' => $channel !== 'email' ? $o['buyerPhone'] : null));
   }
 
@@ -1555,14 +1550,14 @@ class TJ_Rest {
     $by_role = function ($r) use ($users) { $n = 0; foreach ($users as $u) if ($u['role'] === $r) $n++; return $n; };
     $susp = 0; foreach ($users as $u) if ($u['suspended']) $susp++;
     $live = 0; foreach ($events as $e) if ($e['status'] === 'published' && TJ_Store::ts_ms($e['endsAt']) > $now) $live++;
-    $refunds = 0; $tests = 0; foreach ($all as $o) { if ($o['status'] === 'refunded' && empty($o['test'])) $refunds++; if (!empty($o['test'])) $tests++; }
+    $refunds = 0; foreach ($all as $o) { if ($o['status'] === 'refunded' && empty($o['test'])) $refunds++; }
     $tickets = 0; foreach ($paid as $o) $tickets += count($o['tickets']);
     $ro = $all; self::sort_desc_created($ro);
     $ru = $users; self::sort_desc_created($ru);
     return array(
       'users' => count($users), 'attendees' => $by_role('user'), 'organizers' => $by_role('organizer'), 'admins' => $by_role('admin'),
       'suspended' => $susp, 'events' => count($events), 'liveEvents' => $live,
-      'orders' => count($paid), 'refunds' => $refunds, 'testOrders' => $tests, 'ticketsSold' => $tickets,
+      'orders' => count($paid), 'refunds' => $refunds, 'ticketsSold' => $tickets,
       'grossSales' => $sum('subtotal'), 'platformFees' => $sum('fees'), 'totalCollected' => $sum('total'),
       'recentOrders' => array_map(array(__CLASS__, 'admin_order'), array_slice($ro, 0, 8)),
       'recentUsers' => array_map(array(__CLASS__, 'admin_user'), array_slice($ru, 0, 6)),
@@ -2200,80 +2195,6 @@ class TJ_Rest {
     return array('notification' => $m);
   }
 
-  // ---------- sandbox (simulated sales for testing) ----------
-  private static function lan_urls() {
-    // Phones on the same Wi-Fi can open a locally hosted site through the server's private address.
-    $addr = isset($_SERVER['SERVER_ADDR']) ? (string) $_SERVER['SERVER_ADDR'] : '';
-    $port = isset($_SERVER['SERVER_PORT']) ? (int) $_SERVER['SERVER_PORT'] : 80;
-    if (preg_match('/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/', $addr)) return array('http://' . $addr . ($port && $port !== 80 ? ':' . $port : ''));
-    return array();
-  }
-  private static function provider_status() {
-    $n = TJ_Notify::N();
-    return array('email' => !empty($n['emailEnabled']), 'sms' => !empty($n['smsEnabled']) && !empty($n['twilioSid']) && !empty($n['twilioToken']) && !empty($n['twilioFrom']), 'siteUrl' => TJ_Notify::site());
-  }
-  public static function r_sandbox($c) {
-    self::require_admin();
-    $evs = array();
-    foreach (TJ_Store::events() as $e) if ($e['status'] !== 'cancelled') $evs[] = $e;
-    self::sort_starts($evs);
-    $events = array();
-    foreach ($evs as $e) {
-      $p = TJ_Store::user_by_id($e['organizerId']);
-      $events[] = array('id' => $e['id'], 'title' => $e['title'], 'startsAt' => $e['startsAt'], 'status' => $e['status'], 'organizer' => (!empty($e['organizerName']) ? $e['organizerName'] : ($p ? ($p['organization'] ? $p['organization'] : $p['name']) : '')),
-        'tiers' => array_map(function ($t) { return array('id' => $t['id'], 'name' => $t['name'], 'price' => $t['price']); }, $e['tiers']));
-    }
-    $tests = array();
-    foreach (TJ_Store::orders() as $o) if (!empty($o['test'])) $tests[] = $o;
-    self::sort_desc_created($tests);
-    $testOrders = array();
-    foreach ($tests as $o) $testOrders[] = array_merge(self::order_view($o), array('link' => '/#/t/' . $o['id'] . '/' . $o['key']));
-    return array('events' => $events, 'testOrders' => $testOrders, 'providers' => self::provider_status(), 'lanUrls' => self::lan_urls());
-  }
-
-  public static function r_sandbox_sale($c) {
-    $admin = self::require_admin();
-    $b = $c['body'];
-    $ev = TJ_Store::get_event((string) self::g($b, 'eventId'));
-    if (!$ev) self::fail(400, 'Choose an event');
-    $tier = null;
-    foreach ($ev['tiers'] as $t) if ($t['id'] === self::g($b, 'tierId')) $tier = $t;
-    if (!$tier) self::fail(400, 'Choose a ticket type');
-    $qty = self::numk($b, 'qty');
-    if (!self::is_integer_num($qty) || $qty < 1 || $qty > 10) self::fail(400, 'Quantity must be 1–10');
-    $qty = (int) $qty;
-    $buyerName = self::str(self::g($b, 'buyerName'), 'Buyer name', 80, true);
-    $buyerEmail = self::str(self::g($b, 'buyerEmail'), 'Buyer email', 160, true);
-    if (!self::valid_email($buyerEmail)) self::fail(400, 'Enter a valid email address');
-    $buyerPhone = TJ_Notify::normalize_phone(self::g($b, 'buyerPhone'));
-    if (!$buyerPhone) self::fail(400, 'Enter a valid mobile number for the test text');
-    $subtotal = self::round2($tier['price'] * $qty);
-    $fees = self::round2(self::ticket_fee($tier['price']) * $qty);
-    $tickets = array();
-    for ($i = 0; $i < $qty; $i++) $tickets[] = array('code' => self::ticket_code(), 'tierId' => $tier['id'], 'tierName' => $tier['name'], 'price' => $tier['price'], 'checkedIn' => false);
-    $order = array_merge(array(
-      'id' => TJ_Store::new_id('ord'), 'userId' => $admin['id'], 'eventId' => $ev['id'], 'test' => true,
-      'items' => array(array('tierId' => $tier['id'], 'tierName' => $tier['name'], 'price' => $tier['price'], 'qty' => $qty)),
-      'tickets' => $tickets, 'buyerName' => $buyerName, 'buyerEmail' => $buyerEmail, 'buyerPhone' => $buyerPhone,
-      'subtotal' => self::n($subtotal), 'fees' => self::n($fees), 'total' => self::n(self::round2($subtotal + $fees)),
-    ), $subtotal + $fees > 0 ? self::card_info('4242424242424242', $buyerName) : array('cardLast4' => '', 'cardBrand' => '', 'cardHolder' => '', 'cardFingerprint' => ''),
-      array('status' => 'paid', 'key' => self::rand_hex(12), 'createdAt' => TJ_Store::now_iso()));
-    // Test orders never change ticket inventory, sales totals or payouts.
-    TJ_Store::save_order($order);
-    TJ_Notify::with_sandbox(array('orderId' => $order['id'], 'testerEmail' => $admin['email']), function () use ($order, $ev) { TJ_Notify::order_placed($order, $ev); });
-    return array('order' => array_merge(self::order_view($order), array('link' => '/#/t/' . $order['id'] . '/' . $order['key'])), 'providers' => self::provider_status(), 'lanUrls' => self::lan_urls());
-  }
-
-  public static function r_sandbox_messages($c) {
-    self::require_admin();
-    return array('messages' => TJ_Store::messages($c['params']['id']));
-  }
-
-  public static function r_sandbox_clear($c) {
-    self::require_admin();
-    return array('removedOrders' => TJ_Store::delete_test_orders(), 'removedMessages' => TJ_Store::delete_test_messages());
-  }
-
   // =====================================================================
   // sales reports
   // =====================================================================
@@ -2284,7 +2205,6 @@ class TJ_Rest {
     foreach ($events as $e) $evIds[$e['id']] = true;
     $eventId = $qg('eventId') ? $qg('eventId') : '';
     $status = $qg('status') ? $qg('status') : 'paid';          // paid | refunded | all
-    $includeTests = $qg('tests') === '1';
     $fromD = $qg('from') ? TJ_Store::ts_ms($qg('from') . 'T00:00:00') : null;
     $toD = $qg('to') ? TJ_Store::ts_ms($qg('to') . 'T23:59:59.999') : null;
     if ($fromD !== null && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $qg('from'))) $fromD = NAN;
@@ -2294,7 +2214,7 @@ class TJ_Rest {
       if (!isset($evIds[$o['eventId']])) continue;
       if ($eventId !== '' && $o['eventId'] !== $eventId) continue;
       if (!($status === 'all' || ($status === 'refunded' ? $o['status'] === 'refunded' : $o['status'] !== 'refunded'))) continue;
-      if (!$includeTests && !empty($o['test'])) continue;
+      if (!empty($o['test'])) continue;
       $t = TJ_Store::ts_ms($o['createdAt']);
       if ($fromD !== null && !($t >= $fromD)) continue;
       if ($toD !== null && !($t <= $toD)) continue;
@@ -2421,7 +2341,7 @@ class TJ_Rest {
     $evList = array_map(function ($e) { return array('id' => $e['id'], 'title' => $e['title'], 'startsAt' => $e['startsAt']); }, $events);
     self::sort_starts($evList, true);
     return array(
-      'generatedAt' => TJ_Store::now_iso(), 'filters' => array('eventId' => $eventId, 'status' => $status, 'from' => $qg('from') ? $qg('from') : '', 'to' => $qg('to') ? $qg('to') : '', 'tests' => $includeTests),
+      'generatedAt' => TJ_Store::now_iso(), 'filters' => array('eventId' => $eventId, 'status' => $status, 'from' => $qg('from') ? $qg('from') : '', 'to' => $qg('to') ? $qg('to') : ''),
       'events' => $evList, 'summary' => $summary, 'byEvent' => $byEvent, 'byDay' => $byDay, 'byCard' => $byCard, 'transactions' => $transactions, 'withCards' => (bool) $withCards,
     );
   }
@@ -2455,7 +2375,7 @@ class TJ_Rest {
     $gen = TJ_Store::ts_ms($r['generatedAt']);
     $model = array(
       'title' => 'Sales Report — ' . ($single ? $single['title'] : 'All Events'),
-      'subtitle' => $period . ' · ' . $statusTxt . ($f['tests'] ? ' · incl. sandbox tests' : '') . ' · ' . $who . ' · generated ' . wp_date('M j, Y, g:i A', (int) floor($gen / 1000)),
+      'subtitle' => $period . ' · ' . $statusTxt . ' · ' . $who . ' · generated ' . wp_date('M j, Y, g:i A', (int) floor($gen / 1000)),
       'meta' => array(), 'sections' => array(),
     );
     if ($want('summary')) {
@@ -2498,7 +2418,7 @@ class TJ_Rest {
       $cols = array_merge($cols, array(self::col('Qty', 5, 'int'), self::col('Ticket types', 15), self::col('Ticket codes', 16), self::col('Subtotal', 9, 'money'), self::col('Fees', 8, 'money'), self::col('Total', 9, 'money'), self::col('Status', 9)));
       $rows = array(); $tq = 0; $ts = 0; $tf = 0; $tt = 0;
       foreach ($r['transactions'] as $t) {
-        $row = array($t['createdAt'], $t['ref'] . ($t['test'] ? ' (test)' : ''));
+        $row = array($t['createdAt'], $t['ref']);
         if (!$single) $row[] = $t['event'];
         $row = array_merge($row, array($t['buyerName'], $t['buyerEmail'], $t['buyerPhone']));
         if ($wc) $row = array_merge($row, array($t['cardLast4'] ? ($t['cardBrand'] ? $t['cardBrand'] : 'Card') . ' •••• ' . $t['cardLast4'] : 'Free', $t['cardHolder']));
@@ -2580,13 +2500,6 @@ class TJ_Rest {
     $code = strtoupper($c['params']['code']);
     $png = strtolower($c['params']['ext']) === 'png';
     self::send_binary($png ? 'image/png' : 'image/svg+xml', $png ? TJ_QR::png($code, 10) : TJ_QR::svg($code), null, 'public, max-age=31536000, immutable');
-  }
-  /** QR of a ticket-page link (used by the sandbox to open tickets on a phone) */
-  public static function r_qr_link($c) {
-    $u = (string) self::q($c, 'u');
-    if (strlen($u) > 250 || !preg_match('~^https?://[\w.:-]+(/[\w./-]*)?#/t/ord_[0-9a-f]+/[0-9a-f]+$~', $u)) self::qr_plain(400, 'Bad link');
-    if (!class_exists('TJ_QR')) self::fail(500, 'QR codes are not available');
-    self::send_binary('image/svg+xml', TJ_QR::svg($u), null, 'no-store');
   }
   /** QR code of an event's share link (for posters / flyers) */
   public static function r_qr_event($c) {

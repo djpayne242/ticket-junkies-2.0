@@ -2,7 +2,7 @@
 
 This is the complete TicketJunkies.com site rebuilt as a **WordPress plugin**. It keeps everything the original site has:
 - the same look (logo, colors, light/dark/auto switch, the homepage with weather, clock, map and event cards)
-- the same features (events, ticket types, private and complimentary tickets, checkout, QR tickets, PDF downloads, emails and texts, My Dashboard, Organizer Dashboard, Admin Panel, reports with PDF/Word/Excel/CSV downloads, sandbox and settings)
+- the same features (events, ticket types, private and complimentary tickets, checkout, QR tickets, PDF downloads, emails and texts, My Dashboard, Organizer Dashboard, Admin Panel, reports with PDF/Word/Excel/CSV downloads and settings)
 
 Every page is an **Elementor page**, so you can drag things around, add sections, change colors and fonts, and add your own content.
 

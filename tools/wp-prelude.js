@@ -20,7 +20,6 @@ function tjRouteUrl(hash) {
   if (key === 'home') { const qs = hash.split('?')[1]; return base + (qs ? (base.includes('?') ? '&' : '?') + qs : ''); }
   return base + hash;
 }
-const tjLink = (l) => (/^https?:/.test(String(l)) ? l : tjRouteUrl(String(l || '').replace(/^\/?/, '')));
 // The routed "screen" widget on this page (event page, checkout, dashboards …)
 let TJ_SCREEN = null;
 const TJ_SCREEN_DEFAULT = {

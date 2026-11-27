@@ -86,6 +86,13 @@ class TJ_Store {
 
   public static function maybe_upgrade() {
     if (get_option('tj_db_version') !== self::DB_VERSION) self::install();
+    // The admin Sandbox was removed (2.0.6): clear any simulated test orders and test messages it left behind, once.
+    // They never counted toward sales or ticket inventory.
+    if (!get_option('tj_sandbox_removed')) {
+      self::delete_test_orders();
+      self::delete_test_messages();
+      update_option('tj_sandbox_removed', 1);
+    }
   }
 
   // ---------- settings ----------

@@ -5,8 +5,6 @@
  * Port of notify.mjs + the Notify object in server.mjs.
  */
 class TJ_Notify {
-  /** Sandbox context: while set, messages are tagged as tests and staff copies go to the tester. ['orderId','testerEmail'] */
-  private static $sandbox = null;
   private static $queue = array();
   private static $hooked = false;
 
@@ -81,17 +79,6 @@ class TJ_Notify {
   private static function ref($o) { return strtoupper(substr($o['id'], -8)); }
   private static function s($n) { return $n > 1 ? 's' : ''; }
 
-  public static function sandbox_ctx() { return self::$sandbox; }
-  /** Runs $fn with the sandbox context set (null = normal). */
-  public static function with_sandbox($ctx, $fn) {
-    $prev = self::$sandbox;
-    self::$sandbox = $ctx;
-    try { return $fn(); } finally { self::$sandbox = $prev; }
-  }
-  private static function context() {
-    return self::$sandbox ? array('test' => true, 'ref' => self::$sandbox['orderId']) : array();
-  }
-
   // ---------- branded email layout ----------
   public static function email_layout($a) {
     $siteUrl = $a['siteUrl'];
@@ -150,8 +137,8 @@ class TJ_Notify {
   }
 
   /** Fire-and-forget: the log entry is written now, the actual send happens after the response is sent. */
-  public static function email($m) { self::queue_email(array_merge($m, self::context()), true); }
-  public static function sms($m) { self::queue_sms(array_merge($m, self::context()), true); }
+  public static function email($m) { self::queue_email($m, true); }
+  public static function sms($m) { self::queue_sms($m, true); }
 
   private static function queue_email($m, $defer) {
     $n = self::N();
@@ -266,7 +253,7 @@ class TJ_Notify {
     return TJ_Store::update_message($entry);
   }
 
-  // ---------- mail helpers (sandbox redirection + admin alerts) ----------
+  // ---------- mail helpers (admin alerts) ----------
   public static function active_admins() {
     $out = array();
     foreach (TJ_Store::users() as $u) if ($u['role'] === 'admin' && !$u['suspended']) $out[] = $u;
@@ -289,16 +276,6 @@ class TJ_Notify {
   public static function mail($to, $subject, $o) {
     $tag = (string) $o['tag'];
     $body = $o['body'];
-    $sb = self::$sandbox;
-    if ($sb) {
-      // Never bother real organizers/admins with test messages: their copies go to the person running the test.
-      if (strpos($tag, 'buyer.') !== 0) {
-        $role = strpos($tag, 'admin.') === 0 ? 'admin' : 'organizer';
-        $body = '<p style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;padding:10px 14px;border-radius:10px;font-size:13px">🧪 Sandbox test — this is the <strong>' . $role . '</strong> copy. In a real sale it goes to ' . self::h(implode(', ', (array) $to)) . '.</p>' . $body;
-        $to = $sb['testerEmail'];
-      }
-      $subject = '[TEST] ' . $subject;
-    }
     $cta = isset($o['cta']) ? $o['cta'] : null;
     $pre = isset($o['preheader']) ? $o['preheader'] : '';
     self::email(array(

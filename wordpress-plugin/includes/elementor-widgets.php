@@ -76,7 +76,7 @@ class TJ_W_Tickets extends TJ_Screen_Widget { protected $tj_screen = 'tickets'; 
   public function get_name() { return 'tj_tickets'; } public function get_title() { return 'TJ My Ticket Dashboard'; } public function get_icon() { return 'eicon-person'; } }
 class TJ_W_Organizer extends TJ_Screen_Widget { protected $tj_screen = 'organizer'; protected $tj_desc = 'Organizer area: my events, create/edit events and ticket types, attendees, complimentary tickets, door check-in with QR scanner and sales reports.';
   public function get_name() { return 'tj_organizer'; } public function get_title() { return 'TJ Organizer Dashboard'; } public function get_icon() { return 'eicon-dashboard'; } }
-class TJ_W_Admin extends TJ_Screen_Widget { protected $tj_screen = 'admin'; protected $tj_desc = 'Site admin panel: overview, users, events, orders & refunds, reports, emails & texts, sandbox test sales and settings. Only administrators can open it.';
+class TJ_W_Admin extends TJ_Screen_Widget { protected $tj_screen = 'admin'; protected $tj_desc = 'Site admin panel: overview, users, events, orders & refunds, reports, emails & texts and settings. Only administrators can open it.';
   public function get_name() { return 'tj_admin'; } public function get_title() { return 'TJ Admin Panel'; } public function get_icon() { return 'eicon-lock-user'; } }
 class TJ_W_Login extends TJ_Screen_Widget { protected $tj_screen = 'login'; protected $tj_desc = 'Log in form for attendees, organizers and admins.';
   public function get_name() { return 'tj_login'; } public function get_title() { return 'TJ Log In Form'; } public function get_icon() { return 'eicon-lock'; } }

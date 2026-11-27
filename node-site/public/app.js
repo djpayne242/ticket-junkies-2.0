@@ -1653,7 +1653,6 @@ function orderBlock(o) {
         <div class="muted small">${esc([ev.venue, ev.city].filter(Boolean).join(' · '))}</div>
         ${ev.status === 'cancelled' ? '<span class="badge cancelled">Event cancelled</span>' : ''}
         ${o.status === 'refunded' ? '<span class="badge cancelled">Refunded — tickets void</span>' : ''}
-        ${o.test ? '<span class="badge test">🧪 Test order</span>' : ''}
       </div>
       <div style="text-align:right">
         <div class="price">${o.comp ? '🎁 Complimentary' : money(o.total)}</div>
@@ -1730,7 +1729,7 @@ async function pageTickets() {
         <td>${o.items.map((i) => `${i.qty}× ${esc(i.tierName)}`).join(', ')}</td>
         <td class="small">${o.cardLast4 ? `${esc(o.cardBrand || 'Card')} •••• ${esc(o.cardLast4)}` : o.comp ? '🎁 Complimentary' : 'Free'}</td>
         <td><strong>${o.comp ? '$0.00' : money(o.total)}</strong></td>
-        <td>${o.status === 'refunded' ? '<span class="badge cancelled">Refunded</span>' : o.comp ? '<span class="badge comp">🎁 Comp</span>' : '<span class="badge published">Paid</span>'}${o.test ? ' <span class="badge test">Test</span>' : ''}</td>
+        <td>${o.status === 'refunded' ? '<span class="badge cancelled">Refunded</span>' : o.comp ? '<span class="badge comp">🎁 Comp</span>' : '<span class="badge published">Paid</span>'}</td>
       </tr>`).join('')}
     </tbody></table></div>` : ''}`;
   bindOrderActions();
@@ -2306,7 +2305,7 @@ async function pageAttendees(id) {
       </form>
     </div>
     ${attendees.length ? `<div class="table-wrap"><table><thead><tr><th>Attendee</th><th>Ticket</th><th>Code</th><th>Purchased</th><th>Status</th></tr></thead><tbody>
-      ${attendees.map((a) => `<tr><td><strong>${esc(a.holderName || a.buyerName)}</strong>${a.test ? ' <span class="badge test">Test</span>' : ''}${a.comp ? ' <span class="badge comp">🎁 Comp</span>' : ''}<div class="muted small">${esc(a.holderEmail || a.buyerEmail)}${a.holderPhone ? ` · ${esc(a.holderPhone)}` : ""}</div>${a.holderName && a.holderName !== a.buyerName ? `<div class="muted small">Bought by ${esc(a.buyerName)}</div>` : ''}${a.comp && a.compNote ? `<div class="muted small">“${esc(a.compNote)}”</div>` : ''}</td><td>${esc(a.tierName)}</td><td class="code" style="font-size:.9rem">${esc(a.code)}</td><td class="small">${esc(fmtShort(a.purchasedAt))}</td>
+      ${attendees.map((a) => `<tr><td><strong>${esc(a.holderName || a.buyerName)}</strong>${a.comp ? ' <span class="badge comp">🎁 Comp</span>' : ''}<div class="muted small">${esc(a.holderEmail || a.buyerEmail)}${a.holderPhone ? ` · ${esc(a.holderPhone)}` : ""}</div>${a.holderName && a.holderName !== a.buyerName ? `<div class="muted small">Bought by ${esc(a.buyerName)}</div>` : ''}${a.comp && a.compNote ? `<div class="muted small">“${esc(a.compNote)}”</div>` : ''}</td><td>${esc(a.tierName)}</td><td class="code" style="font-size:.9rem">${esc(a.code)}</td><td class="small">${esc(fmtShort(a.purchasedAt))}</td>
       <td>${a.checkedIn ? `<span class="checked">✓ In at ${esc(fmtTime(a.checkedInAt))}</span>` : `<button class="btn btn-ghost btn-sm" data-ci="${esc(a.code)}">Check in</button>`}</td></tr>`).join('')}
       </tbody></table></div>` : '<div class="empty"><div class="big">🧾</div><h3>No tickets sold yet</h3><p class="muted">Share your event link to start selling.</p></div>'}`;
   const checkin = async (code) => {
@@ -2341,7 +2340,7 @@ const statusPill = (u) => (u.suspended ? '<span class="badge cancelled">Suspende
 const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
 
 function adminShell(tab, inner) {
-  const tabs = [['overview', '📊 Overview'], ['users', '👥 Users'], ['organizers', '📣 Organizers'], ['venues', '📍 Venues'], ['events', '🎪 Events'], ['orders', '🧾 Orders'], ['reports', '📈 Reports'], ['messages', '✉️ Emails & Texts'], ['sandbox', '🧪 Sandbox'], ['settings', '⚙ Settings']];
+  const tabs = [['overview', '📊 Overview'], ['users', '👥 Users'], ['organizers', '📣 Organizers'], ['venues', '📍 Venues'], ['events', '🎪 Events'], ['orders', '🧾 Orders'], ['reports', '📈 Reports'], ['messages', '✉️ Emails & Texts'], ['settings', '⚙ Settings']];
   $app.innerHTML = `
     <div class="section-head"><div><h1>Admin Panel</h1><div class="muted">Full control of TicketJunkies.com — users, organizers, events, orders and settings.</div></div></div>
     <div class="admin-tabs">${tabs.map(([k, l]) => `<a href="#/admin/${k}" class="${tab === k ? 'active' : ''}">${l}</a>`).join('')}</div>
@@ -2359,7 +2358,7 @@ const orderRow = (o) => `<tr>
   <td><strong>${esc(o.buyerName)}</strong><div class="muted small">${esc(o.buyerEmail)}</div>${o.account ? `<a class="small" href="#/admin/user/${esc(o.account.id)}">View account</a>` : ''}</td>
   <td>${o.event ? `<a href="#/event/${esc(o.event.id)}">${esc(o.event.title)}</a>` : '<span class="muted">Deleted event</span>'}<div class="muted small">${o.items.map((i) => `${i.qty}× ${esc(i.tierName)}`).join(', ')}</div></td>
   <td><strong>${money(o.total)}</strong><div class="muted small">fees ${money(o.fees)}</div></td>
-  <td>${o.status === 'refunded' ? '<span class="badge cancelled">Refunded</span>' : o.comp ? '<span class="badge comp">🎁 Comp</span>' : '<span class="badge published">Paid</span>'}${o.test ? ' <span class="badge test">Test</span>' : ''}</td>
+  <td>${o.status === 'refunded' ? '<span class="badge cancelled">Refunded</span>' : o.comp ? '<span class="badge comp">🎁 Comp</span>' : '<span class="badge published">Paid</span>'}</td>
   <td>${o.status === 'refunded' ? '' : `<button class="btn btn-danger btn-sm" data-refund="${esc(o.id)}">Refund</button>`}</td></tr>`;
 const ordersTable = (orders) => orders.length
   ? `<div class="table-wrap"><table><thead><tr><th>Order</th><th>Buyer</th><th>Event</th><th>Total</th><th>Status</th><th></th></tr></thead><tbody>${orders.map(orderRow).join('')}</tbody></table></div>`
@@ -2503,7 +2502,6 @@ async function pageAdmin(tab, sub, params) {
   }
 
   if (tab === 'messages') return adminMessages(body, params);
-  if (tab === 'sandbox') return adminSandbox(body);
   if (tab === 'reports') return pageReports(body, params);
   body.innerHTML = '<div class="empty"><h3>Unknown section</h3></div>';
 }
@@ -3098,7 +3096,7 @@ async function adminMessages(body, params) {
     ${notifications.length ? `<div class="table-wrap"><table><thead><tr><th>When</th><th>Type</th><th>To</th><th>Subject / message</th><th>Status</th><th></th></tr></thead><tbody>
     ${notifications.map((n) => `<tr>
       <td class="small">${esc(fmtShort(n.createdAt))}</td>
-      <td>${n.channel === 'sms' ? '📱 Text' : '✉️ Email'}${n.test ? ' <span class="badge test">Test</span>' : ''}<div class="muted small">${esc(n.tag || '')}</div></td>
+      <td>${n.channel === 'sms' ? '📱 Text' : '✉️ Email'}<div class="muted small">${esc(n.tag || '')}</div></td>
       <td class="small">${esc(n.to)}</td>
       <td>${esc(n.subject || '')}${n.attachments && n.attachments.length ? `<div class="muted small">📎 ${n.attachments.length} QR attachment${n.attachments.length > 1 ? 's' : ''}</div>` : ''}</td>
       <td><span class="badge ${st[n.status] || 'draft'}" title="${esc(n.detail || '')}">${esc(n.status)}</span></td>
@@ -3119,146 +3117,6 @@ async function adminMessages(body, params) {
   }));
 }
 
-// ---------- sandbox (admin) ----------
-async function adminSandbox(body) {
-  const data = await api('/api/admin/sandbox');
-  const { events, testOrders, providers } = data;
-  const conn = (on, label) => on ? `<span class="badge published">${label}: sending for real</span>` : `<span class="badge draft">${label}: preview only</span>`;
-  body.innerHTML = `
-    <div class="sandbox-hero">
-      <div><h2 style="margin:0 0 6px">🧪 Sandbox — simulate a ticket sale</h2>
-      <p class="muted" style="margin:0">Runs the full purchase flow (QR tickets, buyer email & text, organizer and admin alerts, door check-in) without real payment. Test orders <strong>never</strong> change ticket inventory, sales totals or payouts, and real organizers are not emailed — their copy comes to you.</p></div>
-      <div class="sandbox-status">${conn(providers.email, 'Email')} ${conn(providers.sms, 'Texts')}<a class="small" href="#/admin/settings">Connect providers →</a></div>
-    </div>
-    ${!events.length ? '<div class="empty"><div class="big">🎪</div><h3>Create an event first</h3><a class="btn btn-primary" href="#/create">+ Create event</a></div>' : `
-    <div class="form-card" style="margin-bottom:22px">
-      ${errBox('sbErr')}
-      <form id="sbForm">
-        <div class="row">
-          <div class="field"><label>Event</label><select name="eventId" id="sbEvent">${events.map((e) => `<option value="${esc(e.id)}">${esc(e.title)} — ${esc(fmtShort(e.startsAt))}${e.status === 'draft' ? ' (draft)' : ''}</option>`).join('')}</select></div>
-          <div class="row" style="gap:10px">
-            <div class="field"><label>Ticket type</label><select name="tierId" id="sbTier"></select></div>
-            <div class="field"><label>Quantity</label><select name="qty">${[1, 2, 3, 4].map((n) => `<option ${n === 2 ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
-          </div>
-        </div>
-        <div class="row3">
-          <div class="field"><label>Buyer name</label><input name="buyerName" required value="${esc(me.name)}" /></div>
-          <div class="field"><label>Send tickets to email</label><input name="buyerEmail" type="email" required value="${esc(me.email)}" /></div>
-          <div class="field"><label>Send text to mobile</label><input name="buyerPhone" type="tel" required value="${esc(me.phone || '')}" placeholder="242-555-1234" /></div>
-        </div>
-        <button class="btn btn-primary" id="sbBtn">🧪 Simulate ticket sale</button>
-        <span class="muted small" style="margin-left:10px">Card used: test card •••• 4242 — no money moves.</span>
-      </form>
-    </div>
-    <div id="sbResult"></div>`}
-    <div class="section-head" style="margin-top:26px"><h2>Test orders (${testOrders.length})</h2>
-      ${testOrders.length ? '<button class="btn btn-danger btn-sm" id="sbClear">Delete all test data</button>' : ''}</div>
-    ${testOrders.length ? `<div class="table-wrap"><table><thead><tr><th>Created</th><th>Event</th><th>Buyer</th><th>Tickets</th><th></th></tr></thead><tbody>
-      ${testOrders.map((o) => `<tr><td class="small">${esc(fmtShort(o.createdAt))}</td><td>${esc(o.event?.title || '')}</td><td class="small">${esc(o.buyerEmail)}<div class="muted">${esc(o.buyerPhone)}</div></td>
-        <td class="small">${o.tickets.map((t) => `<span class="code" style="font-size:.8rem">${esc(t.code)}</span>${t.checkedIn ? ' ✓' : ''}`).join('<br>')}</td>
-        <td><div class="actions"><button class="btn btn-ghost btn-sm" data-show="${esc(o.id)}">Show results</button><a class="btn btn-ghost btn-sm" href="${esc(o.link)}">Ticket page</a></div></td></tr>`).join('')}
-    </tbody></table></div>` : '<p class="muted">No test orders yet.</p>'}`;
-
-  const evSel = document.getElementById('sbEvent');
-  if (evSel) {
-    const fillTiers = () => {
-      const ev = events.find((e) => e.id === evSel.value);
-      document.getElementById('sbTier').innerHTML = ev.tiers.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} — ${t.price ? money(t.price) : 'Free'}</option>`).join('');
-    };
-    evSel.onchange = fillTiers; fillTiers();
-    document.getElementById('sbForm').onsubmit = async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('sbBtn'); btn.disabled = true; btn.textContent = 'Simulating…';
-      try {
-        const r = await api('/api/admin/sandbox/sale', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) });
-        toast('Test sale complete — tickets issued');
-        const keep = { eventId: evSel.value, tierId: document.getElementById('sbTier').value };
-        await adminSandbox(body);
-        const ev2 = document.getElementById('sbEvent');
-        if (ev2) { ev2.value = keep.eventId; ev2.onchange(); document.getElementById('sbTier').value = keep.tierId; document.getElementById('sbBtn').textContent = '🧪 Simulate another sale'; }
-        await showSandboxResult(r.order, r.providers, r.lanUrls);
-        return;
-      } catch (err) { showErr('sbErr', err.message); }
-      btn.disabled = false; btn.textContent = '🧪 Simulate ticket sale';
-    };
-  }
-  body.querySelectorAll('[data-show]').forEach((b) => (b.onclick = () => {
-    const o = testOrders.find((x) => x.id === b.dataset.show);
-    showSandboxResult(o, providers, data.lanUrls);
-  }));
-  const clr = document.getElementById('sbClear');
-  if (clr) clr.onclick = async () => {
-    if (!confirm('Delete all sandbox test orders, tickets and test messages?')) return;
-    const r = await api('/api/admin/sandbox', { method: 'DELETE' });
-    toast(`Removed ${r.removedOrders} test orders and ${r.removedMessages} test messages`);
-    adminSandbox(body);
-  };
-}
-
-async function showSandboxResult(order, providers, lanUrls) {
-  const box = document.getElementById('sbResult') || document.getElementById('adminBody');
-  // messages are sent in the background — give them a moment to be logged
-  let messages = [];
-  for (let i = 0; i < 6; i++) {
-    messages = (await api(`/api/admin/sandbox/orders/${order.id}/messages`)).messages;
-    if (messages.length && messages.every((m) => m.status !== 'pending')) break;
-    await new Promise((r) => setTimeout(r, 400));
-  }
-  const ev = order.event || {};
-  const localLink = location.origin + order.link;
-  const phoneBase = (lanUrls || [])[0];
-  const phoneLink = phoneBase ? phoneBase + order.link : '';
-  const order1 = ['buyer.tickets', 'organizer.sale', 'admin.ticketSale', 'organizer.soldOut'];
-  messages.sort((a, b) => order1.indexOf(a.tag) - order1.indexOf(b.tag) || (a.channel === 'sms') - (b.channel === 'sms'));
-  const label = (m) => ({ 'buyer.tickets': m.channel === 'sms' ? '📱 Buyer text' : '✉️ Buyer ticket email', 'organizer.sale': '📣 Organizer sale email', 'admin.ticketSale': '⚙ Admin sale alert', 'organizer.soldOut': '🔥 Sold-out email' }[m.tag] || m.tag);
-  const stBadge = (m) => m.status === 'sent' ? '<span class="badge published">Delivered to provider</span>' : m.status === 'failed' ? `<span class="badge cancelled" title="${esc(m.detail || '')}">Failed</span>` : '<span class="badge draft">Preview (not sent)</span>';
-
-  box.innerHTML = `
-    <div class="panel sandbox-result">
-      <div class="section-head"><div><h2 style="margin:0">✅ Test sale complete</h2><div class="muted small">${esc(ev.title || '')} · ${order.tickets.length} × ${esc(order.items[0].tierName)} · total ${money(order.total)} · order ${esc(order.id.slice(-8).toUpperCase())}</div></div>
-        <a class="btn btn-blue btn-sm" href="${esc(order.link)}" target="_blank">Open ticket page ↗</a></div>
-
-      <h3>1. Tickets issued</h3>
-      <div class="sb-tickets">${order.tickets.map((t) => `
-        <div class="sb-ticket"><img loading="lazy" decoding="async" src="/qr/${esc(t.code)}.svg" alt="QR ${esc(t.code)}" /><div class="code">${esc(t.code)}</div>
-          <button class="btn btn-green btn-sm" data-ci="${esc(t.code)}">${t.checkedIn ? 'Scan again (should be rejected)' : '🚪 Test door check-in'}</button><div class="small ci-res" data-res="${esc(t.code)}"></div></div>`).join('')}</div>
-
-      <h3 style="margin-top:22px">2. Messages sent</h3>
-      <div class="sb-msgs">${messages.map((m, i) => `<button class="sb-msg ${i === 0 ? 'active' : ''}" data-i="${i}"><strong>${label(m)}</strong><span class="small muted">to ${esc(m.to)}</span>${stBadge(m)}</button>`).join('') || '<p class="muted">No messages logged — check Admin → Emails & Texts.</p>'}</div>
-      <div id="sbMsgView"></div>
-      ${!providers.email || !providers.sms ? `<div class="notice" style="margin-top:12px">${!providers.email ? 'Email is in <strong>preview mode</strong>, so the ticket email is shown here instead of landing in your inbox. ' : ''}${!providers.sms ? 'Texts are in <strong>preview mode</strong>, so the text is shown here instead of on your phone. ' : ''}Connect Resend / Twilio in <a href="#/admin/settings">Settings</a> and run the sandbox again to receive them for real.</div>` : ''}
-
-      <h3 style="margin-top:22px">3. See it on your phone</h3>
-      <div class="sb-phone">
-        ${phoneLink ? `<img loading="lazy" decoding="async" src="/qr/link.svg?u=${encodeURIComponent(phoneLink)}" alt="Open on phone" />` : ''}
-        <div><p style="margin-top:0">${phoneLink ? 'Scan this with your phone camera (phone must be on the same Wi-Fi as this computer) to open the buyer\'s ticket page with the QR codes — exactly what the text message link opens.' : 'Your computer has no local network address right now, so the phone link is unavailable.'}</p>
-          ${phoneLink ? `<div class="code" style="font-size:.8rem;word-break:break-all">${esc(phoneLink)}</div>` : ''}
-          <p class="muted small">Then, on another device, open this event's <a href="#/attendees/${esc(order.eventId)}">Attendees page</a> and use <strong>📷 Scan QR</strong> to scan the ticket on your phone — the full door experience. Once the site is online at your real domain, links work anywhere.</p></div>
-      </div>
-    </div>`;
-
-  const view = document.getElementById('sbMsgView');
-  const showMsg = (i) => {
-    const m = messages[i]; if (!m) return;
-    box.querySelectorAll('.sb-msg').forEach((b) => b.classList.toggle('active', Number(b.dataset.i) === i));
-    view.innerHTML = m.channel === 'sms'
-      ? `<div class="sb-phone-frame"><div class="muted small" style="text-align:center;margin-bottom:10px">Text to ${esc(m.to)}</div><div class="sms-bubble">${esc(m.text).replace(/(https?:\/\/\S+)/g, '<a href="$1" target="_blank">$1</a>')}</div></div>`
-      : `<div class="muted small" style="margin:10px 0 6px"><strong>Subject:</strong> ${esc(m.subject)} · <strong>To:</strong> ${esc(m.to)}${m.attachments?.length ? ` · 📎 ${m.attachments.map(esc).join(', ')}` : ''}</div><iframe sandbox="" class="sb-frame"></iframe>`;
-    if (m.channel === 'email') view.querySelector('iframe').srcdoc = m.html || '';
-  };
-  box.querySelectorAll('.sb-msg').forEach((b) => (b.onclick = () => showMsg(Number(b.dataset.i))));
-  showMsg(0);
-  box.querySelectorAll('[data-ci]').forEach((b) => (b.onclick = async () => {
-    const res = box.querySelector(`[data-res="${b.dataset.ci}"]`);
-    try {
-      const r = await api('/api/organizer/checkin', { method: 'POST', body: { code: b.dataset.ci, eventId: order.eventId } });
-      res.innerHTML = `<span class="checked">✓ Admitted: ${esc(r.ticket.buyerName)} — ${esc(r.ticket.tierName)}</span>`;
-      b.textContent = 'Scan again (should be rejected)';
-    } catch (e) { res.innerHTML = `<span style="color:#b42318;font-weight:700">⛔ ${esc(e.message)}</span>`; }
-  }));
-  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
 // ---------- sales reports (admin: all events + card data; organizer: own events) ----------
 function downloadCsv(filename, header, rows) {
   const q = (x) => { const s = String(x ?? ''); return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? `"${(/^[=+\-@]/.test(s) ? "'" : '') + s.replace(/"/g, '""')}"` : s; };
@@ -3275,7 +3133,7 @@ async function pageReports(adminBody, params) {
   if (!admin) $app.innerHTML = '<div class="loading">Loading report…</div>';
   else adminBody.innerHTML = '<div class="loading">Loading report…</div>';
   const qs = new URLSearchParams();
-  for (const k of ['eventId', 'status', 'from', 'to', 'tests']) if (params.get(k)) qs.set(k, params.get(k));
+  for (const k of ['eventId', 'status', 'from', 'to']) if (params.get(k)) qs.set(k, params.get(k));
   const { report: r } = await api(`/api/${admin ? 'admin' : 'organizer'}/reports?${qs}`);
   const f = r.filters, s = r.summary;
   const base = admin ? '#/admin/reports' : '#/reports';
@@ -3294,7 +3152,6 @@ async function pageReports(adminBody, params) {
       <label class="rf-date">From <input type="date" name="from" value="${esc(f.from)}" /></label>
       <label class="rf-date">To <input type="date" name="to" value="${esc(f.to)}" /></label>
       <select name="status">${[['paid', 'Paid orders'], ['refunded', 'Refunded only'], ['all', 'Paid + refunded']].map(([v, l]) => `<option value="${v}" ${v === f.status ? 'selected' : ''}>${l}</option>`).join('')}</select>
-      ${admin ? `<label class="check"><input type="checkbox" name="tests" value="1" ${f.tests ? 'checked' : ''} /> Include sandbox tests</label>` : ''}
       <button class="btn btn-blue">Run report</button>
     </form>
 
@@ -3312,7 +3169,7 @@ async function pageReports(adminBody, params) {
       </div>
     </div>
 
-    <div class="report-title"><h2 style="margin:0">${esc(evTitle)}</h2><div class="muted small">${esc(period)} · ${f.status === 'all' ? 'paid + refunded' : f.status === 'refunded' ? 'refunded orders' : 'paid orders'}${f.tests ? ' · incl. sandbox tests' : ''} · generated ${esc(dt(r.generatedAt))}</div></div>
+    <div class="report-title"><h2 style="margin:0">${esc(evTitle)}</h2><div class="muted small">${esc(period)} · ${f.status === 'all' ? 'paid + refunded' : f.status === 'refunded' ? 'refunded orders' : 'paid orders'} · generated ${esc(dt(r.generatedAt))}</div></div>
 
     <div class="stats report-stats">
       <div class="stat"><div class="muted small">Tickets sold</div><div class="num">${s.tickets.toLocaleString()}</div><div class="muted small">${s.orders} orders · ${s.checkedIn} checked in${s.compTickets ? ` · 🎁 ${s.compTickets} comps` : ''}</div></div>
@@ -3350,7 +3207,7 @@ async function pageReports(adminBody, params) {
       ${r.transactions.length ? `<div class="table-wrap"><table class="tx-table"><thead><tr><th>Sale date</th><th>Order</th>${single ? '' : '<th>Event</th>'}<th>Attendee / buyer</th>${admin ? '<th>Card</th>' : ''}<th>Tickets</th><th>Amount</th><th>Status</th></tr></thead><tbody>
         ${r.transactions.map((t) => `<tr data-search="${esc([t.buyerName, t.buyerEmail, t.buyerPhone, t.ref, t.event, ...t.codes, admin ? `${t.cardBrand} ${t.cardLast4} ${t.cardHolder}` : ''].join(' ').toLowerCase())}">
           <td class="small">${esc(dt(t.createdAt))}</td>
-          <td><span class="code" style="font-size:.8rem">${esc(t.ref)}</span>${t.test ? ' <span class="badge test">Test</span>' : ''}</td>
+          <td><span class="code" style="font-size:.8rem">${esc(t.ref)}</span></td>
           ${single ? '' : `<td class="small">${esc(t.event)}</td>`}
           <td><strong>${esc(t.buyerName)}</strong><div class="muted small">${esc(t.buyerEmail)}${t.buyerPhone ? '<br>' + esc(t.buyerPhone) : ''}</div></td>
           ${admin ? `<td class="small"><strong>${esc(cardTxt(t))}</strong>${t.cardHolder ? '<br>' + esc(t.cardHolder) : ''}</td>` : ''}
@@ -3394,8 +3251,8 @@ async function pageReports(adminBody, params) {
   const tsv = host.querySelector('#txSearch');
   if (tsv) tsv.oninput = () => { const q = tsv.value.toLowerCase().trim(); host.querySelectorAll('.tx-table tbody tr').forEach((tr) => { tr.style.display = !q || tr.dataset.search.includes(q) ? '' : 'none'; }); };
   host.querySelector('#csvTx').onclick = () => downloadCsv(`ticketjunkies-orders-${slug}-${stamp}.csv`,
-    ['Sale date', 'Order #', 'Event', 'Event date', 'Buyer name', 'Email', 'Phone', ...(admin ? ['Card brand', 'Card last 4', 'Name on card', 'Card fingerprint'] : []), 'Tickets (qty)', 'Ticket types', 'Ticket codes', 'Checked in', 'Ticket sales', 'Fees', 'Total', 'Status', 'Refunded on', 'Sandbox test'],
-    r.transactions.map((t) => [dt(t.createdAt), t.ref, t.event, dt(t.eventDate), t.buyerName, t.buyerEmail, t.buyerPhone, ...(admin ? [t.cardBrand, t.cardLast4, t.cardHolder, t.cardFingerprint] : []), t.qty, t.items.map((i) => `${i.qty}x ${i.name}`).join('; '), t.codes.join(' '), t.checkedIn, t.subtotal.toFixed(2), t.fees.toFixed(2), t.total.toFixed(2), t.status, t.refundedAt ? dt(t.refundedAt) : '', t.test ? 'yes' : '']));
+    ['Sale date', 'Order #', 'Event', 'Event date', 'Buyer name', 'Email', 'Phone', ...(admin ? ['Card brand', 'Card last 4', 'Name on card', 'Card fingerprint'] : []), 'Tickets (qty)', 'Ticket types', 'Ticket codes', 'Checked in', 'Ticket sales', 'Fees', 'Total', 'Status', 'Refunded on'],
+    r.transactions.map((t) => [dt(t.createdAt), t.ref, t.event, dt(t.eventDate), t.buyerName, t.buyerEmail, t.buyerPhone, ...(admin ? [t.cardBrand, t.cardLast4, t.cardHolder, t.cardFingerprint] : []), t.qty, t.items.map((i) => `${i.qty}x ${i.name}`).join('; '), t.codes.join(' '), t.checkedIn, t.subtotal.toFixed(2), t.fees.toFixed(2), t.total.toFixed(2), t.status, t.refundedAt ? dt(t.refundedAt) : '']));
   host.querySelector('#csvTickets').onclick = () => downloadCsv(`ticketjunkies-attendees-${slug}-${stamp}.csv`,
     ['Ticket code', 'Event', 'Ticket type', 'Price', 'First name', 'Last name', 'Email', 'Phone', 'Order #', 'Sale date', 'Order status', ...(admin ? ['Card'] : [])],
     r.transactions.flatMap((t) => { const types = t.items.flatMap((i) => Array(i.qty).fill(i)); return t.codes.map((c, k) => [c, t.event, types[k]?.name || '', (types[k]?.price ?? 0).toFixed(2), t.buyerFirstName, t.buyerLastName, t.buyerEmail, t.buyerPhone, t.ref, dt(t.createdAt), t.status, ...(admin ? [cardTxt(t)] : [])]); }));
@@ -3958,7 +3815,6 @@ async function pagePublicTickets(id, key) {
       <div class="big">🎟️</div>
       <h1 class="display" style="font-size:2rem">${esc(ev.title)}</h1>
       <p class="muted">${ev.startsAt ? esc(fmtLong(ev.startsAt)) : ''}<br>${esc([ev.venue, ev.address, ev.city].filter(Boolean).join(', '))}</p>
-      ${order.test ? '<div class="notice">🧪 <strong>Sandbox test ticket</strong> — created from the Admin Panel to test the ticket flow. Not a real purchase.</div>' : ''}
       ${order.status === 'refunded' ? '<div class="error">This order was refunded — these tickets are no longer valid.</div>' : ''}
       ${ev.status === 'cancelled' ? '<div class="error">This event has been cancelled.</div>' : ''}
       <p><strong>${esc(order.buyerName)}</strong> · ${order.tickets.length} ticket${order.tickets.length > 1 ? 's' : ''} · Order ${esc(order.id.slice(-8).toUpperCase())}</p>
