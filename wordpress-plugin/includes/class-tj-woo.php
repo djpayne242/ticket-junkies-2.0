@@ -271,8 +271,6 @@ final class TJ_Woo {
       $h = is_array($tj['holders']) ? array_values($tj['holders']) : array();
       for ($k = 0; $k < $q; $k++) $out[$id]['body']['attendees'][] = isset($h[$k]) && is_array($h[$k]) ? $h[$k] : array();
     }
-    // the first ticket of each event belongs to the buyer
-    foreach ($out as &$g) if ($g['body']['attendees']) $g['body']['attendees'][0] = array();
     return $out;
   }
 
@@ -367,6 +365,8 @@ final class TJ_Woo {
     if (!$order || !self::has_tickets($order)) return;
     $url = function_exists('tj_route_url') ? tj_route_url('#/tickets') : home_url('/');
     $ok = $order->get_meta('_tj_issued') === 'yes';
+    // paid: empty the TicketJunkies cart in this browser (it is kept until payment succeeds, so a declined card can try again)
+    echo '<script>try{localStorage.removeItem("tj_basket");sessionStorage.removeItem("tj_cart")}catch(e){}</script>';
     echo '<section class="tj-woo-thanks" style="margin:0 0 24px;padding:18px 20px;border-radius:14px;background:#eef9e8;border:1px solid #84d65f;color:#12350a">';
     echo $ok
       ? '<h2 style="margin:0 0 6px">🎉 You\'re going!</h2><p style="margin:0 0 12px">Your QR tickets are on their way by email and text, and they\'re saved in your TicketJunkies dashboard.</p><a class="button" href="' . esc_url($url) . '">🎟️ View my tickets</a>'

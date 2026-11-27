@@ -1017,17 +1017,36 @@ class TJ_Rest {
   }
 
   /** Optional name + email for each ticket ("Who's coming?"). Each person with an email gets their own ticket email + PDF. */
-  private static function ticket_holders($list, $count) {
+  /**
+   * Attendee details for every ticket: first name, last name, email and mobile number are all required.
+   * $lenient (payment already taken by WooCommerce): keep whatever was given instead of refusing.
+   */
+  private static function ticket_holders($list, $count, $lenient = false) {
     $att = is_array($list) ? array_values($list) : array();
     $out = array();
     for ($i = 0; $i < $count; $i++) {
       $a = isset($att[$i]) && is_array($att[$i]) ? $att[$i] : array();
-      $name = self::str(self::g($a, 'name'), 'Name for ticket ' . ($i + 1), 80);
-      $email = strtolower(self::str(self::g($a, 'email'), 'Email for ticket ' . ($i + 1), 160));
-      if ($email !== '' && (!self::valid_email($email) || !is_email($email))) self::fail(400, 'Enter a valid email for ticket ' . ($i + 1));
-      if ($email !== '' && $name === '') self::fail(400, 'Enter a name for ticket ' . ($i + 1));
+      $T = 'Ticket ' . ($i + 1);
+      $first = self::str(self::g($a, 'firstName'), $T . ' first name', 40);
+      $last = self::str(self::g($a, 'lastName'), $T . ' last name', 40);
+      if ($first === '' && $last === '' && self::g($a, 'name')) {
+        $p = preg_split('/\s+/', self::str(self::g($a, 'name'), $T . ' name', 80));
+        $first = count($p) > 1 ? implode(' ', array_slice($p, 0, -1)) : $p[0];
+        $last = count($p) > 1 ? $p[count($p) - 1] : '';
+      }
+      $email = strtolower(self::str(self::g($a, 'email'), $T . ' email', 160));
+      $phone = TJ_Notify::normalize_phone(self::g($a, 'phone'));
+      if (!$lenient) {
+        if ($first === '') self::fail(400, $T . ': enter the attendee\'s first name');
+        if ($last === '') self::fail(400, $T . ': enter the attendee\'s last name');
+        if ($email === '') self::fail(400, $T . ': enter the attendee\'s email');
+        if (!self::valid_email($email) || !is_email($email)) self::fail(400, $T . ': enter a valid email address');
+        if (!$phone) self::fail(400, $T . ': enter a valid mobile number');
+      }
       $h = array();
-      if ($name !== '') { $h['holderName'] = $name; if ($email !== '') $h['holderEmail'] = $email; }
+      if ($first !== '' || $last !== '') { $h['holderName'] = trim($first . ' ' . $last); $h['holderFirstName'] = $first; $h['holderLastName'] = $last; }
+      if ($email !== '' && self::valid_email($email)) $h['holderEmail'] = $email;
+      if ($phone) $h['holderPhone'] = $phone;
       $out[] = $h;
     }
     return $out;
@@ -1141,7 +1160,7 @@ class TJ_Rest {
     $buyerPhone = TJ_Notify::normalize_phone(self::g($body, 'buyerPhone'));
     if (!$buyerPhone) self::fail(400, 'Enter a valid mobile number so we can text your tickets');
     $tcount = 0; foreach ($lines as $l) $tcount += $l['qty'];
-    $holders = self::ticket_holders(self::g($body, 'attendees'), $tcount);
+    $holders = self::ticket_holders(self::g($body, 'attendees'), $tcount, $force);
 
     $subtotal = 0; $fees = 0;
     foreach ($lines as $l) { $subtotal += $l['unit'] * $l['qty']; $fees += self::ticket_fee($l['unit']) * $l['qty']; }
@@ -1404,7 +1423,7 @@ class TJ_Rest {
     foreach (TJ_Store::orders() as $o) {
       if ($o['eventId'] !== $ev['id'] || $o['status'] === 'refunded') continue;
       foreach ($o['tickets'] as $t) {
-        $att[] = array_merge(array('code' => $t['code'], 'tierName' => $t['tierName'], 'price' => $t['price'], 'checkedIn' => !empty($t['checkedIn']), 'checkedInAt' => self::g($t, 'checkedInAt') ? $t['checkedInAt'] : null, 'holderName' => (string) self::g($t, 'holderName', ''), 'holderEmail' => (string) self::g($t, 'holderEmail', ''), 'buyerName' => $o['buyerName']),
+        $att[] = array_merge(array('code' => $t['code'], 'tierName' => $t['tierName'], 'price' => $t['price'], 'checkedIn' => !empty($t['checkedIn']), 'checkedInAt' => self::g($t, 'checkedInAt') ? $t['checkedInAt'] : null, 'holderName' => (string) self::g($t, 'holderName', ''), 'holderEmail' => (string) self::g($t, 'holderEmail', ''), 'holderPhone' => (string) self::g($t, 'holderPhone', ''), 'buyerName' => $o['buyerName']),
           self::split_name($o),
           array('buyerEmail' => $o['buyerEmail'], 'buyerPhone' => (string) self::g($o, 'buyerPhone', ''), 'orderId' => $o['id'], 'purchasedAt' => $o['createdAt'], 'test' => !empty($o['test']), 'comp' => !empty($o['comp']), 'compNote' => (string) self::g($o, 'compNote', ''), 'issuedBy' => (string) self::g($o, 'issuedBy', '')));
       }

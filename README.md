@@ -20,6 +20,20 @@ TicketJunkies 2.0 is the fresh home for the project. It starts from everything t
 - **Includes v1.3.7 and v1.3.8** (not yet on the live site, which runs 1.3.6): weather, map, events and calendar follow the visitor's location; secure payment section with Visa / Mastercard / Amex logos; My Tickets / My Dashboard menu link in a green box.
 - Everything else (ticket scanner, shopping cart, organizer and admin dashboards, mobile app) is carried over unchanged.
 
+## What's new in 2.0.5 — new ticket buying steps
+Buying tickets now follows five clear steps, shown in a step bar at the top:
+
+1. **Select tickets** — pick the ticket type(s) and how many on the event page.
+2. **Attendee information** — one box per ticket with **First name, Last name, Email and Mobile number**. Every field is required. **Go to Cart** stays greyed out and shows what is missing (in red) until every box is filled in correctly. The first ticket is filled in from your account to save typing.
+3. **Cart** — review everything, change quantities, edit any attendee's details, remove a single ticket (**✕ Remove**) or a whole event (**✕ Remove event**). Changes are saved as you type.
+4. **Checkout** — the **🔒 Checkout** button only works when every attendee is complete.
+5. **Payment** — the checkout page now only asks for payment. On WordPress the buyer goes straight to the store's secure WooCommerce checkout.
+
+Also:
+- Each ticket keeps its own attendee's name, email and mobile number, and each attendee gets their own QR ticket by email. The organizer's attendee list and CSV export now include the attendee's phone number.
+- The server enforces the same rules, so tickets can't be bought without full attendee details. After WooCommerce has already taken payment, tickets are always issued.
+- The cart is kept until payment succeeds, so a declined card can try again without re-entering anything.
+
 ## What's new in 2.0.4 — real payments through WooCommerce
 - **Paid tickets are charged by your WooCommerce payment gateway.** The old card form was a demo: it only checked that a card number *looked* valid and never contacted a bank, so any card (even a locked one) "worked" and no money was taken. It is removed from the WordPress plugin.
 - **Every ticket type is a WooCommerce product** (hidden from the shop, category *Event tickets*), kept in sync automatically: name, price, sold/cancelled state. Existing events are synced when you update the plugin.

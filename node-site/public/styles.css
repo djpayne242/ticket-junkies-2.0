@@ -1391,3 +1391,29 @@ html[data-theme="dark"] .area-gps { color: #8fb6ec; }
 .woo-pay-ic { font-size: 1.4rem; line-height: 1.2; }
 .woo-pay-note strong { display: block; }
 .woo-pay-note span { display: block; font-size: .88rem; color: var(--muted); margin-top: 2px; }
+
+/* ---------- ticket purchase flow: attendee details (all required) ---------- */
+.sticky.unstick { position: static; }
+.att-section { margin: 14px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+.att-section h3 { margin: 0 0 8px; }
+.att-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px 12px; margin: 10px 0; background: var(--bg); }
+.att-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.att-num { font-weight: 800; }
+.att-tier { font-size: .82rem; color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-rm { border: 0; background: none; color: #d64545; font-weight: 700; font-size: .82rem; cursor: pointer; padding: 4px 6px; border-radius: 8px; }
+.att-rm:hover { background: rgba(214,69,69,.1); }
+.att-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.att-f { display: flex; flex-direction: column; gap: 3px; font-size: .82rem; font-weight: 700; min-width: 0; }
+.att-f input { width: 100%; padding: 9px 11px; border-radius: 9px; border: 1px solid var(--field-line); font-size: 1rem; font-family: inherit; background: var(--card); color: var(--ink); font-weight: 400; }
+.att-f input:focus { outline: 2px solid rgba(55,110,184,.35); border-color: var(--blue); }
+.att-f input.invalid { border-color: #d64545; background: rgba(214,69,69,.06); }
+.att-err { font-style: normal; font-weight: 600; font-size: .78rem; color: #d64545; }
+.att-hint { text-align: center; font-size: .85rem; color: #d64545; font-weight: 600; min-height: 1.2em; margin-top: 6px; }
+.btn.is-disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.cart-atts { padding: 0 2px 6px; }
+.cart-atts .att-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cart-qty { display: inline-flex; align-items: center; gap: 6px; }
+.att-sum { font-size: .82rem; color: var(--muted); padding: 2px 0 6px 10px; line-height: 1.5; }
+@media (max-width: 900px) { .cart-atts .att-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 420px) { .att-grid, .cart-atts .att-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .att-f input { font-size: 16px; } }

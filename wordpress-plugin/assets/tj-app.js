@@ -1066,6 +1066,9 @@ async function pageEvent(id) {
       </div>`;
     }).join('');
     const tt = totals();
+    att = fitAtt(att, buyable ? qty : {}, ev.tiers);
+    let nAtt = 0;
+    const attBlocks = ev.tiers.filter((t) => (att[t.id] || []).length).map((t) => att[t.id].map((a, i) => attBlockHtml(`${ev.id}|${t.id}|${i}`, a, ++nAtt, t.name, false)).join('')).join('');
     panel.innerHTML = `
       <h3>Tickets</h3>
       ${!buyable ? `<div class="notice">${ended ? 'This event has ended.' : 'Tickets are not on sale.'}</div>` : ''}
@@ -1075,33 +1078,44 @@ async function pageEvent(id) {
         <div><span class="muted">Service fees</span><span>${money(tt.fees)}</span></div>
         <div class="total"><span>Total</span><span>${money(tt.total)}</span></div>
       </div>
-      ${!buyable ? '' : added ? `
-      <div class="added-box">
-        <div class="added-msg">✅ ${cartCount(cartOnly(ev.id))} ticket${cartCount(cartOnly(ev.id)) === 1 ? '' : 's'} added to your cart</div>
-        <button class="btn btn-primary btn-block btn-lg" id="goCheckout">Checkout · ${cartCount()} ticket${cartCount() === 1 ? '' : 's'} →</button>
-        <div class="added-links"><a href="#/">← Keep shopping</a><a href="#/cart">🛒 View cart</a></div>
-      </div>` : `
-      <div class="flow-steps"><span class="on">1 · Choose tickets</span><span>2 · Add to cart</span><span>3 · Checkout</span></div>
-      <button class="btn btn-primary btn-block btn-lg" id="addCart" ${tt.count && tt.ok ? '' : 'disabled'}>${tt.count ? `🛒 ${inCart ? 'Update cart' : 'Add to cart'} · ${tt.count} ticket${tt.count > 1 ? 's' : ''}` : 'Select tickets above'}</button>
-      ${inCart ? `<button class="btn btn-blue btn-block" id="goCheckout" style="margin-top:8px">Checkout · ${cartCount()} ticket${cartCount() === 1 ? '' : 's'} in cart →</button>` : ''}`}
+      ${!buyable ? '' : `
+      ${tt.count ? `<div class="att-section" id="attSection">
+        <h3>👥 Attendee information</h3>
+        <p class="muted small" style="margin-top:-4px">Enter the details for each ticket. <strong>All fields are required.</strong> Each person gets their own QR ticket by email.</p>
+        ${attBlocks}
+      </div>` : ''}
+      <div class="flow-steps"><span class="${tt.count ? 'done' : 'on'}">1 · Tickets${tt.count ? ' ✓' : ''}</span><span class="${tt.count ? 'on' : ''}">2 · Attendees</span><span>3 · Cart</span><span>4 · Checkout</span></div>
+      <button class="btn btn-primary btn-block btn-lg" id="goCart" ${tt.count && tt.ok ? '' : 'disabled'}>${tt.count ? `🛒 Go to Cart · ${tt.count} ticket${tt.count > 1 ? 's' : ''}` : 'Select tickets above'}</button>
+      <div class="att-hint" id="attHint" aria-live="polite"></div>
+      ${inCart ? `<div class="added-links"><a href="#/cart">🛒 View cart (${cartCount()} ticket${cartCount() === 1 ? '' : 's'})</a></div>` : ''}`}
       ${!me ? '<p class="muted small" style="text-align:center;margin:10px 0 0">🔒 You will create a free account (or log in) before checkout, so all your tickets are saved in your dashboard.</p>' : ''}`;
+    // the attendee forms make the panel tall, so it stops following the page while you fill them in
+    panel.closest('.sticky')?.classList.toggle('unstick', tt.count > 0);
     panel.querySelectorAll('select[data-tier]').forEach((s) => (s.onchange = () => { qty[s.dataset.tier] = Number(s.value); added = false; renderPicker(); }));
     panel.querySelectorAll('input[data-amt]').forEach((inp) => {
       inp.onchange = () => { amt[inp.dataset.amt] = inp.value === '' ? '' : round2(Number(inp.value)); renderPicker(); };
       inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); inp.onchange(); } };
     });
-    // Step 2: add to cart → the next step shown is Checkout
-    const ac = document.getElementById('addCart');
-    if (ac) ac.onclick = () => {
-      cartPut(ev, qty, amt);
-      inCart = true; added = true;
-      toast('🛒 Added to your cart');
-      renderPicker();
-      const b = document.getElementById('goCheckout'); if (b) b.focus();
+    // Step 2: every attendee field must be filled in before Go to Cart works
+    const gcBtn = document.getElementById('goCart');
+    const hint = document.getElementById('attHint');
+    const refresh = () => {
+      const miss = ev.tiers.flatMap((t) => att[t.id] || []).reduce((a, r) => a + attMissing(r), 0);
+      const ready = !!(tt.count && tt.ok && !miss);
+      if (gcBtn && tt.count && tt.ok) { gcBtn.classList.toggle('is-disabled', !ready); gcBtn.setAttribute('aria-disabled', ready ? 'false' : 'true'); }
+      if (hint) hint.textContent = tt.count && miss ? `Fill in ${miss} more required field${miss === 1 ? '' : 's'} to continue` : '';
+      return ready;
     };
-    // Step 3: checkout (pays for everything in the cart; asks to log in or sign up first if needed)
-    const gc = document.getElementById('goCheckout');
-    if (gc) gc.onclick = () => go('#/cart/checkout');
+    const binder = bindAttInputs(panel, (key) => { const [, tid, i] = key.split('|'); return att[tid] && att[tid][Number(i)]; }, refresh);
+    refresh();
+    // Step 3: Go to Cart
+    if (gcBtn) gcBtn.onclick = () => {
+      if (!refresh()) { binder.showAll(); toast('Please fill in every attendee field', true); return; }
+      cartPut(ev, qty, amt, att);
+      inCart = true;
+      toast('🛒 Added to your cart');
+      go('#/cart');
+    };
   }
 
   // a ticket type's sales just opened → show its quantity picker
@@ -1109,6 +1123,9 @@ async function pageEvent(id) {
   // tickets for this event already in the shopping cart
   let inCart = !!cartLoad()[ev.id];
   let added = false;
+  // attendee details already entered for tickets in the cart
+  let att = {};
+  if (inCart && cartLoad()[ev.id].att) { try { att = JSON.parse(JSON.stringify(cartLoad()[ev.id].att)); } catch {} }
   if (inCart) { const c = cartLoad()[ev.id]; for (const t of ev.tiers) if (c.qty[t.id]) { qty[t.id] = Math.min(Number(c.qty[t.id]) || 0, tierCap(t)); if (c.amt && c.amt[t.id] !== undefined && tierKindOf(t) === 'donation') amt[t.id] = c.amt[t.id]; } }
   // restore cart after login redirect
   try {
@@ -1116,6 +1133,80 @@ async function pageEvent(id) {
     if (saved && saved.id === ev.id) for (const t of ev.tiers) { qty[t.id] = Math.min(saved.qty[t.id] || 0, tierCap(t)); if (saved.amt && saved.amt[t.id] !== undefined && tierKindOf(t) === 'donation') amt[t.id] = saved.amt[t.id]; }
   } catch {}
   renderPicker();
+}
+
+// ---------- attendee details: one block per ticket, every field required ----------
+const ATT_FIELDS = [
+  ['first', 'First name', 'given-name', 'text', 40],
+  ['last', 'Last name', 'family-name', 'text', 40],
+  ['email', 'Email', 'email', 'email', 160],
+  ['phone', 'Mobile number', 'tel', 'tel', 30],
+];
+const attEmailOk = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v || '').trim());
+// same rules as the server: +country code (8–15 digits), 10-digit NANP, 11 digits starting with 1, or a 7-digit Bahamas number
+function attPhoneOk(v) {
+  const raw = String(v || '').trim();
+  if (!raw) return false;
+  const d = raw.replace(/\D/g, '');
+  if (raw[0] === '+') return d.length >= 8 && d.length <= 15;
+  return d.length === 10 || (d.length === 11 && d[0] === '1') || d.length === 7;
+}
+const attFieldOk = (k, v) => (k === 'email' ? attEmailOk(v) : k === 'phone' ? attPhoneOk(v) : String(v || '').trim().length > 0);
+const attFieldMsg = (k, v) => (!String(v || '').trim() ? 'Required' : k === 'email' ? 'Enter a valid email' : k === 'phone' ? 'Enter a valid mobile number' : 'Required');
+const blankAtt = () => ({ first: '', last: '', email: '', phone: '' });
+const attEmpty = (a) => !a || ATT_FIELDS.every(([k]) => !String(a[k] || '').trim());
+const attMissing = (a) => ATT_FIELDS.filter(([k]) => !attFieldOk(k, a && a[k])).length;
+function myAtt() {
+  if (!me) return blankAtt();
+  const p = String(me.name || '').trim().split(/\s+/);
+  return { first: p.length > 1 ? p.slice(0, -1).join(' ') : (p[0] || ''), last: p.length > 1 ? p[p.length - 1] : '', email: me.email || '', phone: me.phone || '' };
+}
+// One attendee per ticket: rows are added (blank) or trimmed to match the quantity. The first ticket is prefilled with your account details.
+function fitAtt(att, qty, tiers) {
+  const out = {};
+  for (const t of tiers) {
+    const q = Number(qty[t.id]) || 0;
+    if (!q) continue;
+    const rows = (att && Array.isArray(att[t.id]) ? att[t.id] : []).slice(0, q).map((a) => ({ ...blankAtt(), ...a }));
+    while (rows.length < q) rows.push(blankAtt());
+    out[t.id] = rows;
+  }
+  const flat = tiers.flatMap((t) => out[t.id] || []);
+  if (me && flat.length && attEmpty(flat[0]) && !flat.some((a) => String(a.email || '').toLowerCase() === String(me.email || '').toLowerCase())) Object.assign(flat[0], myAtt());
+  return out;
+}
+const attPayload = (a) => {
+  const f = String(a.first || '').trim(), l = String(a.last || '').trim();
+  return { firstName: f, lastName: l, name: `${f} ${l}`.trim(), email: String(a.email || '').trim(), phone: String(a.phone || '').trim() };
+};
+// One attendee block; key = "eventId|tierId|index"
+function attBlockHtml(key, a, n, tierName, removable) {
+  return `<div class="att-card" data-att-card="${esc(key)}">
+    <div class="att-card-head"><span class="att-num">Ticket ${n}</span><span class="att-tier">${esc(tierName)}</span>${removable ? `<button type="button" class="att-rm" data-att-rm="${esc(key)}" aria-label="Remove ticket ${n}">✕ Remove</button>` : ''}</div>
+    <div class="att-grid">${ATT_FIELDS.map(([k, label, ac, type, max]) => `<label class="att-f"><span>${label} <span class="req">*</span></span><input data-att="${esc(key)}" data-k="${k}" type="${type}" autocomplete="${ac}" maxlength="${max}"${k === 'phone' ? ' inputmode="tel" placeholder="242-555-1234"' : k === 'email' ? ' placeholder="name@example.com"' : ''} value="${esc(a[k] || '')}" required aria-required="true" /><em class="att-err" hidden></em></label>`).join('')}</div>
+  </div>`;
+}
+// Wires attendee inputs: getRow(key) returns the object to update; onChange runs after each keystroke.
+function bindAttInputs(root, getRow, onChange) {
+  const show = (inp, force) => {
+    const ok = attFieldOk(inp.dataset.k, inp.value);
+    const vis = !ok && (force || inp.dataset.touched);
+    inp.classList.toggle('invalid', !!vis);
+    inp.setAttribute('aria-invalid', vis ? 'true' : 'false');
+    const err = inp.parentElement.querySelector('.att-err');
+    if (err) { err.hidden = !vis; err.textContent = vis ? attFieldMsg(inp.dataset.k, inp.value) : ''; }
+  };
+  root.querySelectorAll('input[data-att]').forEach((inp) => {
+    inp.oninput = () => { const r = getRow(inp.dataset.att); if (r) r[inp.dataset.k] = inp.value; show(inp); onChange(); };
+    inp.onblur = () => { inp.dataset.touched = '1'; show(inp); };
+  });
+  return {
+    showAll() {
+      let first = null;
+      root.querySelectorAll('input[data-att]').forEach((inp) => { inp.dataset.touched = '1'; show(inp, true); if (!first && !attFieldOk(inp.dataset.k, inp.value)) first = inp; });
+      if (first) { first.scrollIntoView({ behavior: 'smooth', block: 'center' }); first.focus({ preventScroll: true }); }
+    },
+  };
 }
 
 // ---------- shopping cart (tickets from several events, paid in one checkout) ----------
@@ -1135,11 +1226,15 @@ function cartSave(c) {
 }
 const cartOnly = (id) => { const e = cartLoad()[id]; return e ? { [id]: e } : {}; };
 const cartCount = (c = cartLoad()) => Object.values(c).reduce((a, e) => a + Object.values(e.qty || {}).reduce((x, y) => x + (Number(y) || 0), 0), 0);
-function cartPut(ev, qty, amt) {
+function cartPut(ev, qty, amt, att) {
   const c = cartLoad();
-  const q = {}, a = {};
-  for (const [k, v] of Object.entries(qty)) if (Number(v) > 0) { q[k] = Number(v); if (amt && amt[k] !== undefined) a[k] = amt[k]; }
-  if (Object.keys(q).length) c[ev.id] = { qty: q, amt: a, title: ev.title, addedAt: Date.now() }; else delete c[ev.id];
+  const q = {}, a = {}, at = {};
+  for (const [k, v] of Object.entries(qty)) if (Number(v) > 0) {
+    q[k] = Number(v);
+    if (amt && amt[k] !== undefined) a[k] = amt[k];
+    if (att && Array.isArray(att[k])) at[k] = att[k].slice(0, q[k]).map((r) => ({ first: r.first || '', last: r.last || '', email: r.email || '', phone: r.phone || '' }));
+  }
+  if (Object.keys(q).length) c[ev.id] = { qty: q, amt: a, att: at, title: ev.title, addedAt: Date.now() }; else delete c[ev.id];
   cartSave(c);
 }
 const CART_ICON = '<svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3h2.6l2.6 12.2a1.6 1.6 0 0 0 1.6 1.3h8.6a1.6 1.6 0 0 0 1.6-1.2L21.5 7H6"/></svg>';
@@ -1193,20 +1288,58 @@ const cartTotals = (groups) => {
   return { subtotal: round2(subtotal), fees: round2(fees), total: round2(subtotal + fees), count };
 };
 
+// Cart groups with one attendee row per ticket (older carts without attendee details get blank rows)
+async function cartGroups() {
+  const groups = await cartLines();
+  for (const g of groups) g.att = fitAtt(g.entry.att, Object.fromEntries(g.lines.map((l) => [l.t.id, l.qty])), g.lines.map((l) => l.t));
+  return groups;
+}
+const groupAttMissing = (g) => g.lines.reduce((a, l) => a + (g.att[l.t.id] || []).slice(0, l.qty).reduce((x, r) => x + attMissing(r), 0), 0);
+// Request body for paying the whole cart: the buyer is your account; every ticket carries its attendee
+function checkoutBody(groups) {
+  const live = groups.filter((g) => !g.problem && g.lines.some((l) => l.qty));
+  const all = live.flatMap((g) => g.lines.filter((l) => l.qty).flatMap((l) => (g.att[l.t.id] || []).slice(0, l.qty)));
+  const first = all[0] || blankAtt(), mine = myAtt();
+  const nm = mine.first && mine.last ? mine : first;
+  return {
+    carts: live.map((g) => ({
+      eventId: g.id,
+      items: g.lines.filter((l) => l.qty).map((l) => ({ tierId: l.t.id, qty: l.qty, ...(tierKindOf(l.t) === 'donation' ? { amount: l.unit } : {}) })),
+      attendees: g.lines.filter((l) => l.qty).flatMap((l) => (g.att[l.t.id] || []).slice(0, l.qty).map(attPayload)),
+    })),
+    buyerFirstName: String(nm.first || '').trim(), buyerLastName: String(nm.last || '').trim(),
+    buyerEmail: String(mine.email || first.email || '').trim(),
+    buyerPhone: String(attPhoneOk(mine.phone) ? mine.phone : first.phone || '').trim(),
+  };
+}
+// Saves the cart exactly as shown (quantities trimmed to what's available, one attendee per ticket)
+function cartStoreGroups(groups) {
+  const c = cartLoad();
+  for (const g of groups) {
+    if (!c[g.id]) continue;
+    for (const l of g.lines) { if (l.qty) c[g.id].qty[l.t.id] = l.qty; else delete c[g.id].qty[l.t.id]; }
+    c[g.id].att = Object.fromEntries(g.lines.filter((l) => l.qty).map((l) => [l.t.id, (g.att[l.t.id] || []).slice(0, l.qty)]));
+    if (!Object.keys(c[g.id].qty).length) delete c[g.id];
+  }
+  cartSave(c);
+}
+
 async function pageCart() {
   loading();
-  const groups = await cartLines();
+  const groups = await cartGroups();
   const t = cartTotals(groups);
   if (!groups.length) {
-    $app.innerHTML = `<div class="empty"><div class="big">🛒</div><h2>Your cart is empty</h2><p class="muted">Pick tickets on any event page and tap <strong>Add to cart</strong>. You can collect tickets for several events and pay once.</p><a class="btn btn-primary" href="#/">Browse events</a></div>`;
+    $app.innerHTML = `<div class="empty"><div class="big">🛒</div><h2>Your cart is empty</h2><p class="muted">Pick tickets on any event page, fill in the attendee details and tap <strong>Go to Cart</strong>. You can collect tickets for several events and pay once.</p><a class="btn btn-primary" href="#/">Browse events</a></div>`;
     return;
   }
+  const problems = groups.some((g) => g.problem);
+  const liveCount = groups.filter((g) => !g.problem && g.lines.some((l) => l.qty)).length;
   $app.innerHTML = `
-    <div class="checkout-steps"><span class="done">1 · Tickets ✓</span><span class="on">2 · Cart</span><span>3 · Checkout</span><span>4 · Your tickets</span></div>
-    <div class="section-head"><div><h1>🛒 Your cart</h1><div class="muted">${t.count} ticket${t.count === 1 ? '' : 's'} for ${groups.filter((g) => !g.problem && g.lines.some((l) => l.qty)).length} event${groups.length === 1 ? '' : 's'} · pay for everything in one checkout</div></div><a class="small" href="#/">← Keep shopping</a></div>
+    <div class="checkout-steps"><span class="done">1 · Tickets ✓</span><span class="done">2 · Attendees ✓</span><span class="on">3 · Cart</span><span>4 · Checkout</span></div>
+    <div class="section-head"><div><h1>🛒 Your cart</h1><div class="muted">${t.count} ticket${t.count === 1 ? '' : 's'} for ${liveCount} event${liveCount === 1 ? '' : 's'} · review your tickets and attendees, then check out</div></div><a class="small" href="#/">← Keep shopping</a></div>
     <div class="checkout-layout">
       <div class="cart-list">
-        ${groups.map((g) => `
+        ${groups.map((g) => { let n = 0; return `
         <div class="panel cart-event${g.problem ? ' cart-off' : ''}">
           <div class="cart-ev-head">
             ${g.ev ? `<a href="#/event/${esc(g.id)}" class="cart-thumb">${cover(g.ev)}</a>` : '<div class="cart-thumb cart-thumb-empty">🎟️</div>'}
@@ -1215,15 +1348,16 @@ async function pageCart() {
               ${g.ev ? `<div class="muted small">📅 ${esc(fmtLong(g.ev.startsAt))}</div><div class="muted small">📍 ${esc([g.ev.venue, g.ev.city].filter(Boolean).join(', '))}</div>` : ''}
               ${g.problem ? `<div class="notice" style="margin:8px 0 0">${esc(g.problem)}. Remove it to continue.</div>` : ''}
             </div>
-            <button class="btn btn-ghost btn-sm" data-cart-remove="${esc(g.id)}" title="Remove from cart">✕ Remove</button>
+            <button class="btn btn-ghost btn-sm" data-cart-remove="${esc(g.id)}" title="Remove this event from your cart">✕ Remove event</button>
           </div>
           ${g.lines.map((l) => `
           <div class="cart-line">
             <div><strong>${esc(l.t.name)}</strong> <span class="muted small">${tierKindOf(l.t) === 'donation' ? `💝 ${money(l.unit)} each` : l.unit ? `${money(l.unit)} + ${money(fee(l.unit))} fee` : 'Free'}</span>${l.note ? `<div class="small cart-warn">⚠️ ${esc(l.note)}</div>` : ''}</div>
-            ${l.cap > 0 && !g.problem ? `<select data-cart-ev="${esc(g.id)}" data-cart-tier="${esc(l.t.id)}" aria-label="Quantity">${Array.from({ length: l.cap + 1 }, (_, i) => `<option ${i === l.qty ? 'selected' : ''}>${i}</option>`).join('')}</select>` : '<span class="badge">Unavailable</span>'}
+            ${l.cap > 0 && !g.problem ? `<label class="cart-qty"><span class="muted small">Qty</span><select data-cart-ev="${esc(g.id)}" data-cart-tier="${esc(l.t.id)}" aria-label="Quantity of ${esc(l.t.name)}">${Array.from({ length: l.cap + 1 }, (_, i) => `<option ${i === l.qty ? 'selected' : ''}>${i}</option>`).join('')}</select></label>` : '<span class="badge">Unavailable</span>'}
             <strong class="cart-amt">${l.qty ? (l.unit ? money(l.unit * l.qty) : 'Free') : '—'}</strong>
-          </div>`).join('')}
-        </div>`).join('')}
+          </div>
+          ${!g.problem && l.qty ? `<div class="cart-atts">${(g.att[l.t.id] || []).slice(0, l.qty).map((a, i) => attBlockHtml(`${g.id}|${l.t.id}|${i}`, a, ++n, l.t.name, true)).join('')}</div>` : ''}`).join('')}
+        </div>`; }).join('')}
       </div>
       <aside class="panel checkout-summary">
         <h3 style="margin-top:0">Order summary</h3>
@@ -1232,27 +1366,63 @@ async function pageCart() {
           <div><span class="muted">Service fees</span><span>${money(t.fees)}</span></div>
           <div class="total"><span>Total</span><span>${money(t.total)}</span></div>
         </div>
-        <button class="btn btn-primary btn-block btn-lg" id="cartGo" style="margin-top:12px" ${t.count && !groups.some((g) => g.problem) ? '' : 'disabled'}>Checkout · ${t.count} ticket${t.count === 1 ? '' : 's'}</button>
-        ${groups.some((g) => g.problem) ? '<p class="muted small" style="text-align:center">Remove the events that are no longer available to continue.</p>' : ''}
+        <button class="btn btn-primary btn-block btn-lg" id="cartGo" style="margin-top:12px" ${t.count && !problems ? '' : 'disabled'}>🔒 Checkout · ${t.count} ticket${t.count === 1 ? '' : 's'}</button>
+        <div class="att-hint" id="cartHint" aria-live="polite"></div>
+        ${problems ? '<p class="muted small" style="text-align:center">Remove the events that are no longer available to continue.</p>' : ''}
         ${!me ? '<p class="muted small" style="text-align:center;margin:10px 0 0">🔒 You will create a free account (or log in) before paying, so all your tickets are saved in your dashboard.</p>' : ''}
         <button class="btn btn-ghost btn-block btn-sm" id="cartClear" style="margin-top:10px">Empty cart</button>
       </aside>
     </div>`;
-  $app.querySelectorAll('[data-cart-remove]').forEach((b) => (b.onclick = () => { const c = cartLoad(); delete c[b.dataset.cartRemove]; cartSave(c); pageCart(); }));
-  $app.querySelectorAll('select[data-cart-ev]').forEach((s) => (s.onchange = () => {
-    const c = cartLoad(); const e = c[s.dataset.cartEv]; if (!e) return;
-    const v = Number(s.value);
-    if (v) e.qty[s.dataset.cartTier] = v; else delete e.qty[s.dataset.cartTier];
-    if (!Object.keys(e.qty).length) delete c[s.dataset.cartEv];
-    cartSave(c); pageCart();
+  const findRow = (key) => { const [eid, tid, i] = key.split('|'); const g = groups.find((x) => x.id === eid); return g && g.att[tid] && g.att[tid][Number(i)]; };
+  const goBtn = document.getElementById('cartGo');
+  const hint = document.getElementById('cartHint');
+  const refresh = () => {
+    const miss = groups.filter((g) => !g.problem).reduce((a, g) => a + groupAttMissing(g), 0);
+    const ready = !!(t.count && !problems && !miss);
+    if (t.count && !problems) { goBtn.classList.toggle('is-disabled', !ready); goBtn.setAttribute('aria-disabled', ready ? 'false' : 'true'); }
+    hint.textContent = t.count && !problems && miss ? `Fill in ${miss} more required attendee field${miss === 1 ? '' : 's'} to check out` : '';
+    return ready;
+  };
+  // attendee edits are saved as you type
+  const binder = bindAttInputs($app, findRow, () => { cartStoreGroups(groups); refresh(); });
+  refresh();
+  $app.querySelectorAll('[data-cart-remove]').forEach((b) => (b.onclick = () => { const c = cartLoad(); delete c[b.dataset.cartRemove]; cartSave(c); toast('Event removed from your cart'); pageCart(); }));
+  // remove one ticket together with its attendee
+  $app.querySelectorAll('[data-att-rm]').forEach((b) => (b.onclick = () => {
+    const [eid, tid, i] = b.dataset.attRm.split('|');
+    const g = groups.find((x) => x.id === eid);
+    const l = g && g.lines.find((x) => x.t.id === tid);
+    if (!l) return;
+    g.att[tid].splice(Number(i), 1);
+    l.qty = Math.max(0, l.qty - 1);
+    cartStoreGroups(groups);
+    toast('Ticket removed');
+    pageCart();
+  }));
+  $app.querySelectorAll('select[data-cart-ev]').forEach((sel) => (sel.onchange = () => {
+    const g = groups.find((x) => x.id === sel.dataset.cartEv);
+    const l = g && g.lines.find((x) => x.t.id === sel.dataset.cartTier);
+    if (!l) return;
+    l.qty = Number(sel.value);
+    g.att = fitAtt(g.att, Object.fromEntries(g.lines.map((x) => [x.t.id, x.qty])), g.lines.map((x) => x.t));
+    cartStoreGroups(groups);
+    pageCart();
   }));
   document.getElementById('cartClear').onclick = () => { if (confirm('Remove everything from your cart?')) { cartSave({}); pageCart(); } };
-  document.getElementById('cartGo').onclick = () => {
-    // keep the trimmed quantities, then continue
-    const c = cartLoad();
-    for (const g of groups) if (c[g.id]) { for (const l of g.lines) { if (l.qty) c[g.id].qty[l.t.id] = l.qty; else delete c[g.id].qty[l.t.id]; } if (!Object.keys(c[g.id].qty).length) delete c[g.id]; }
-    cartSave(c);
-    go(me ? '#/cart/checkout' : '#/register?role=user&from=checkout&next=' + encodeURIComponent('#/cart/checkout'));
+  // Step 4: Checkout
+  goBtn.onclick = async () => {
+    if (!t.count || problems) return;
+    if (!refresh()) { binder.showAll(); toast('Please fill in every attendee field', true); return; }
+    cartStoreGroups(groups);
+    if (!me) { go('#/register?role=user&from=checkout&next=' + encodeURIComponent('#/cart/checkout')); return; }
+    // WordPress + WooCommerce: go straight to the store's secure checkout page to pay
+    if (t.total > 0 && payProvider() === 'woocommerce' && !META.captcha?.checkout) {
+      goBtn.disabled = true; goBtn.textContent = 'Opening secure checkout…';
+      try { await wooCheckout(checkoutBody(groups)); }
+      catch (err) { toast(err.message, true); goBtn.disabled = false; goBtn.textContent = '🔒 Checkout'; }
+      return;
+    }
+    go('#/cart/checkout');
   };
 }
 
@@ -1305,90 +1475,56 @@ function secureCheckoutHtml() {
   </section>`;
 }
 
+// Step 5: checkout = payment only (attendee details were entered before the cart)
 async function pageCartCheckout() {
   if (!me) { go('#/register?role=user&from=checkout&next=' + encodeURIComponent('#/cart/checkout')); return; }
   loading();
-  const groups = (await cartLines()).filter((g) => !g.problem && g.lines.some((l) => l.qty));
+  const groups = (await cartGroups()).filter((g) => !g.problem && g.lines.some((l) => l.qty));
   const t = cartTotals(groups);
   if (!t.count) { go('#/cart'); return; }
-  const np = String(me.name || '').trim().split(/\s+/);
-  const nameParts = { first: np.length > 1 ? np.slice(0, -1).join(' ') : (np[0] || ''), last: np.length > 1 ? np[np.length - 1] : '' };
-  const slotsOf = (g) => g.lines.flatMap((l) => Array(l.qty).fill(l.t));
+  if (groups.some((g) => groupAttMissing(g))) { toast('Please complete the attendee details for every ticket', true); go('#/cart'); return; }
+  const body = checkoutBody(groups);
+  const woo = t.total > 0 && payProvider() === 'woocommerce';
   $app.innerHTML = `
-    <div class="checkout-steps"><span class="done">1 · Tickets ✓</span><span class="done">2 · Cart ✓</span><span class="on">3 · Checkout</span><span>4 · Your tickets</span></div>
+    <div class="checkout-steps"><span class="done">1 · Tickets ✓</span><span class="done">2 · Attendees ✓</span><span class="done">3 · Cart ✓</span><span class="on">4 · Checkout</span></div>
     <div class="section-head"><div><a href="#/cart" class="small">← Back to cart</a><h1>Checkout</h1><div class="muted">Signed in as <strong>${esc(me.name)}</strong> (${esc(me.email)}) · your tickets will be saved to <a href="#/tickets">My Dashboard</a></div></div></div>
     <div class="checkout-layout">
       <div class="panel">
         ${errBox('coErr')}
         <form id="ccForm">
-          <h3>🎟️ Your details</h3>
-          <div class="row">
-            <div class="field"><label>First name <span class="req">*</span></label><input name="buyerFirstName" autocomplete="given-name" required maxlength="40" value="${esc(nameParts.first)}" /></div>
-            <div class="field"><label>Last name <span class="req">*</span></label><input name="buyerLastName" autocomplete="family-name" required maxlength="40" value="${esc(nameParts.last)}" /></div>
-          </div>
-          <div class="row">
-            <div class="field"><label>Email for tickets & QR codes</label><input name="buyerEmail" type="email" autocomplete="email" required value="${esc(me.email)}" /></div>
-            <div class="field"><label>Mobile number <span class="muted small">(we'll text your tickets)</span></label><input name="buyerPhone" type="tel" autocomplete="tel" required placeholder="242-555-1234" value="${esc(me.phone || '')}" /></div>
-          </div>
-          ${groups.some((g) => slotsOf(g).length > 1) ? `
-          <h3 style="margin-top:10px">👥 Who's coming? <span class="muted small" style="font-weight:500">(optional)</span></h3>
-          <p class="muted small" style="margin-top:-4px">The first ticket for each event is yours. Add a name and email for your guests and we'll email each person their own ticket with a PDF. Leave a ticket blank to keep it in your email.</p>
-          ${groups.map((g) => slotsOf(g).length > 1 ? `<div class="att-event"><div class="att-ev-title">${esc(g.ev.title)}</div><div class="att-list">${slotsOf(g).map((tt, i) => i === 0 ? '' : `
-            <div class="att-row">
-              <div class="att-label">Ticket ${i + 1} · ${esc(tt.name)}</div>
-              <div class="row">
-                <div class="field"><label>Guest name</label><input data-cart-att-name="${esc(g.id)}:${i}" maxlength="80" autocomplete="off" placeholder="Full name" /></div>
-                <div class="field"><label>Guest email</label><input data-cart-att-email="${esc(g.id)}:${i}" type="email" maxlength="160" autocomplete="off" placeholder="name@example.com" /></div>
-              </div>
-            </div>`).join('')}</div></div>` : '').join('')}` : ''}
-          ${t.total > 0 ? `
-          <h3 style="margin-top:10px">💳 Payment</h3>
-          ${paymentFieldsHtml()}` : ''}
+          ${t.total > 0 ? `<h3>💳 Payment</h3>${paymentFieldsHtml()}` : '<h3>🎁 Free tickets</h3><p class="muted">No payment is needed. Confirm to get your tickets.</p>'}
           ${META.captcha?.checkout ? '<div class="captcha-box" id="ccCaptcha"></div>' : ''}
           <button class="btn btn-primary btn-block btn-lg" id="ccPay" ${t.total > 0 && payProvider() === 'none' ? 'disabled' : ''}>${t.total > 0 ? payButtonText(t.total) : 'Get my free tickets'}</button>
-          <p class="muted small" style="text-align:center;margin:10px 0 0">One payment for everything. You'll get each event's QR tickets by email and text, and they'll always be in your dashboard.</p>
+          <p class="muted small" style="text-align:center;margin:10px 0 0">Each attendee gets their QR ticket by email, and every ticket is saved in your dashboard.</p>
         </form>
       </div>
       <aside class="panel checkout-summary">
         <h3 style="margin-top:0">🛒 ${t.count} ticket${t.count === 1 ? '' : 's'} · ${groups.length} event${groups.length === 1 ? '' : 's'}</h3>
         <div class="summary">
-          ${groups.map((g) => `<div class="cart-sum-ev"><strong>${esc(g.ev.title)}</strong><span class="muted small">${esc(fmtLong(g.ev.startsAt))}</span></div>${g.lines.filter((l) => l.qty).map((l) => `<div><span>${l.qty} × ${esc(l.t.name)}</span><span>${l.unit ? money(l.unit * l.qty) : 'Free'}</span></div>`).join('')}`).join('')}
+          ${groups.map((g) => `<div class="cart-sum-ev"><strong>${esc(g.ev.title)}</strong><span class="muted small">${esc(fmtLong(g.ev.startsAt))}</span></div>${g.lines.filter((l) => l.qty).map((l) => `<div><span>${l.qty} × ${esc(l.t.name)}</span><span>${l.unit ? money(l.unit * l.qty) : 'Free'}</span></div><div class="att-sum">${(g.att[l.t.id] || []).slice(0, l.qty).map((a) => `👤 ${esc(a.first)} ${esc(a.last)}`).join('<br>')}</div>`).join('')}`).join('')}
           <div><span class="muted">Service fees</span><span>${money(t.fees)}</span></div>
           <div class="total"><span>Total</span><span>${money(t.total)}</span></div>
         </div>
-        <a class="btn btn-ghost btn-block btn-sm" style="margin-top:12px" href="#/cart">✏️ Change cart</a>
+        <a class="btn btn-ghost btn-block btn-sm" style="margin-top:12px" href="#/cart">✏️ Edit cart &amp; attendees</a>
       </aside>
     </div>
     ${secureCheckoutHtml()}`;
   const cap = META.captcha?.checkout ? Captcha.mount(document.getElementById('ccCaptcha')) : null;
-  document.getElementById('ccForm').onsubmit = async (e) => {
+  const form = document.getElementById('ccForm');
+  form.onsubmit = async (e) => {
     e.preventDefault();
     const f = Object.fromEntries(new FormData(e.target));
-    f.buyerFirstName = (f.buyerFirstName || '').trim(); f.buyerLastName = (f.buyerLastName || '').trim();
-    if (!f.buyerFirstName || !f.buyerLastName) { showErr('coErr', 'Please enter your first and last name.'); return; }
-    const carts = groups.map((g) => ({
-      eventId: g.id,
-      items: g.lines.filter((l) => l.qty).map((l) => ({ tierId: l.t.id, qty: l.qty, ...(tierKindOf(l.t) === 'donation' ? { amount: l.unit } : {}) })),
-      attendees: slotsOf(g).map((_, i) => {
-        if (!i) return {};
-        const v = (k) => ((document.querySelector(`[data-cart-att-${k}="${g.id}:${i}"]`) || {}).value || '').trim();
-        return { name: v('name'), email: v('email') };
-      }),
-    }));
-    for (const [gi, c] of carts.entries()) { const m = c.attendees.findIndex((a) => a.email && !a.name); if (m > 0) { showErr('coErr', `${groups[gi].ev.title}: please enter a name for ticket ${m + 1}, or clear its email.`); return; } }
     const captcha = cap ? cap.token() : '';
     if (cap && !captcha) { showErr('coErr', 'Please tick "I\'m not a robot" to complete your purchase.'); return; }
     const btn = document.getElementById('ccPay'); btn.disabled = true; btn.textContent = 'Processing…';
     try {
-      if (t.total > 0 && payProvider() === 'woocommerce') {
+      if (woo) {
         btn.textContent = 'Opening secure checkout…';
-        await wooCheckout({ carts, buyerFirstName: f.buyerFirstName, buyerLastName: f.buyerLastName, buyerEmail: f.buyerEmail, buyerPhone: f.buyerPhone, captcha });
-        cartSave({}); sessionStorage.removeItem('tj_cart');
+        await wooCheckout({ ...body, captcha });
         return;
       }
       const r = await api('/api/cart/checkout', { method: 'POST', body: {
-        carts, buyerFirstName: f.buyerFirstName, buyerLastName: f.buyerLastName, buyerEmail: f.buyerEmail, buyerPhone: f.buyerPhone,
-        payment: { cardHolder: f.cardHolder, cardNumber: f.cardNumber, expiry: f.expiry, cvc: f.cvc }, captcha,
+        ...body, payment: { cardHolder: f.cardHolder, cardNumber: f.cardNumber, expiry: f.expiry, cvc: f.cvc }, captcha,
       } });
       cartSave({});
       sessionStorage.removeItem('tj_cart');
@@ -1396,7 +1532,7 @@ async function pageCartCheckout() {
       toast(`You're going! 🎉 ${n} ticket${n === 1 ? '' : 's'} saved to your dashboard`);
       window.scrollTo(0, 0);
       $app.innerHTML = `
-        <div class="checkout-steps"><span class="done">1 · Tickets ✓</span><span class="done">2 · Cart ✓</span><span class="done">3 · Checkout ✓</span><span class="on">4 · Your tickets</span></div>
+        <div class="checkout-steps"><span class="done">1 · Tickets ✓</span><span class="done">2 · Attendees ✓</span><span class="done">3 · Cart ✓</span><span class="done">4 · Checkout ✓</span><span class="on">🎟️ Your tickets</span></div>
         <div class="form-page"><div class="form-card" style="max-width:720px">
           <h1 class="display" style="font-size:2.2rem">🎉 You're going!</h1>
           <p>${n} ticket${n === 1 ? '' : 's'} for ${r.orders.length} event${r.orders.length === 1 ? '' : 's'}. We've emailed your QR tickets${r.orders.some((o) => o.tickets.some((x) => x.holderEmail)) ? ' and sent each guest their own ticket' : ''}. Total paid: <strong>${money(round2(r.orders.reduce((a, o) => a + o.total, 0)))}</strong>.</p>
@@ -1409,119 +1545,14 @@ async function pageCartCheckout() {
         </div></div>`;
     } catch (err) { showErr('coErr', err.message); btn.disabled = false; btn.textContent = 'Try again'; if (cap) cap.reset(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
   };
+  // paying through WooCommerce with no robot check: continue straight to the store's secure payment page
+  if (woo && !cap) { const b = document.getElementById('ccPay'); if (b) b.textContent = 'Taking you to secure payment…'; form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event('submit', { cancelable: true })); }
 }
 
 // ---------- checkout page (account required) ----------
+// Old single-event checkout links: tickets now go event page → attendees → cart → checkout.
 async function pageCheckout(id) {
-  if (!me) {
-    // Force an account before checkout: new visitors create one, existing customers can log in from there.
-    go('#/register?role=user&from=checkout&next=' + encodeURIComponent('#/checkout/' + id));
-    return;
-  }
-  loading();
-  const { event: ev } = await api('/api/events/' + encodeURIComponent(id));
-  let saved = null;
-  try { saved = JSON.parse(sessionStorage.getItem('tj_cart') || 'null'); } catch {}
-  const qty = {};
-  for (const t of ev.tiers) if (t.visibility !== 'private') qty[t.id] = saved && saved.id === ev.id ? Math.min(saved.qty[t.id] || 0, tierCap(t)) : 0;
-  const lines = ev.tiers.filter((t) => qty[t.id] > 0);
-  const amt = {};
-  for (const t of lines) amt[t.id] = tierKindOf(t) === 'donation' ? Math.max(t.price, round2(Number(saved?.amt?.[t.id] ?? t.suggested ?? t.price)) || 0) : tierKindOf(t) === 'free' ? 0 : t.price;
-  const ended = new Date(ev.endsAt) < new Date();
-  if (!lines.length || ev.status !== 'published' || ended) {
-    $app.innerHTML = `<div class="empty"><div class="big">🛒</div><h2>${ended ? 'This event has ended' : ev.status !== 'published' ? 'Tickets are not on sale' : 'Your cart is empty'}</h2><p class="muted">Pick your tickets on the event page first.</p><a class="btn btn-primary" href="#/event/${esc(ev.id)}">Back to ${esc(ev.title)}</a></div>`;
-    return;
-  }
-  const subtotal = round2(lines.reduce((a, t) => a + amt[t.id] * qty[t.id], 0));
-  const fees = round2(lines.reduce((a, t) => a + fee(amt[t.id]) * qty[t.id], 0));
-  const total = round2(subtotal + fees);
-  const count = lines.reduce((a, t) => a + qty[t.id], 0);
-  const slots = lines.flatMap((t) => Array(qty[t.id]).fill(t)); // one entry per ticket, same order the server creates them
-  const np = String(me.name || '').trim().split(/\s+/);
-  const nameParts = { first: np.length > 1 ? np.slice(0, -1).join(' ') : (np[0] || ''), last: np.length > 1 ? np[np.length - 1] : '' };
-  $app.innerHTML = `
-    <div class="checkout-steps"><span class="done">1 · Tickets</span><span class="done">2 · Account ✓</span><span class="on">3 · Checkout</span><span>4 · Your tickets</span></div>
-    <div class="section-head"><div><a href="#/event/${esc(ev.id)}" class="small">← Back to event</a><h1>Checkout</h1><div class="muted">Signed in as <strong>${esc(me.name)}</strong> (${esc(me.email)}) · your tickets will be saved to <a href="#/tickets">My Dashboard</a></div></div></div>
-    <div class="checkout-layout">
-      <div class="panel">
-        ${errBox('coErr')}
-        <form id="coForm">
-          <h3>🎟️ Attendee details</h3>
-          <div class="row">
-            <div class="field"><label>Attendee first name <span class="req">*</span></label><input name="buyerFirstName" autocomplete="given-name" required maxlength="40" value="${esc(nameParts.first)}" placeholder="First name" /></div>
-            <div class="field"><label>Attendee last name <span class="req">*</span></label><input name="buyerLastName" autocomplete="family-name" required maxlength="40" value="${esc(nameParts.last)}" placeholder="Last name" /></div>
-          </div>
-          <div class="row">
-            <div class="field"><label>Email for tickets & QR codes</label><input name="buyerEmail" type="email" autocomplete="email" required value="${esc(me.email)}" /></div>
-            <div class="field"><label>Mobile number <span class="muted small">(we'll text your tickets)</span></label><input name="buyerPhone" type="tel" autocomplete="tel" required placeholder="242-555-1234" value="${esc(me.phone || '')}" /></div>
-          </div>
-          ${count > 1 ? `
-          <h3 style="margin-top:10px">👥 Who's coming? <span class="muted small" style="font-weight:500">(optional)</span></h3>
-          <p class="muted small" style="margin-top:-4px">Ticket 1 is yours. Add a name and email for your guests and we'll email each person their own ticket with a PDF they can download or share. Leave a ticket blank to keep it in your email.</p>
-          <div class="att-list">${slots.map((t, i) => i === 0 ? '' : `
-            <div class="att-row">
-              <div class="att-label">Ticket ${i + 1} · ${esc(t.name)}</div>
-              <div class="row">
-                <div class="field"><label>Guest name</label><input data-att-name="${i}" maxlength="80" autocomplete="off" placeholder="Full name" /></div>
-                <div class="field"><label>Guest email</label><input data-att-email="${i}" type="email" maxlength="160" autocomplete="off" placeholder="name@example.com" /></div>
-              </div>
-            </div>`).join('')}</div>` : ''}
-          ${total > 0 ? `
-          <h3 style="margin-top:10px">💳 Payment</h3>
-          ${paymentFieldsHtml()}` : ''}
-          ${META.captcha?.checkout ? '<div class="captcha-box" id="coCaptcha"></div>' : ''}
-          <button class="btn btn-primary btn-block btn-lg" id="payBtn" ${total > 0 && payProvider() === 'none' ? 'disabled' : ''}>${total > 0 ? payButtonText(total) : 'Get my free tickets'}</button>
-          <p class="muted small" style="text-align:center;margin:10px 0 0">You'll get your QR tickets by email and text, and they'll always be in your dashboard to view or download.</p>
-        </form>
-      </div>
-      <aside class="panel checkout-summary">
-        <a href="#/event/${esc(ev.id)}">${cover(ev)}</a>
-        <h3 style="margin:12px 0 2px">${esc(ev.title)}</h3>
-        <div class="muted small">📅 ${esc(fmtLong(ev.startsAt))}</div>
-        <div class="muted small">📍 ${esc([ev.venue, ev.city].filter(Boolean).join(', '))}</div>
-        <div class="summary">
-          ${lines.map((t) => `<div><span>${qty[t.id]} × ${esc(t.name)}${tierKindOf(t) === 'donation' ? ` <span class="muted small">(💝 ${money(amt[t.id])} each)</span>` : ''}</span><span>${amt[t.id] ? money(amt[t.id] * qty[t.id]) : 'Free'}</span></div>`).join('')}
-          <div><span class="muted">Service fees</span><span>${money(fees)}</span></div>
-          <div class="total"><span>Total</span><span>${money(total)}</span></div>
-        </div>
-        <a class="btn btn-ghost btn-block btn-sm" style="margin-top:12px" href="#/event/${esc(ev.id)}">✏️ Change tickets</a>
-      </aside>
-    </div>
-    ${secureCheckoutHtml()}`;
-  const cap = META.captcha?.checkout ? Captcha.mount(document.getElementById('coCaptcha')) : null;
-  document.getElementById('coForm').onsubmit = async (e) => {
-    e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.target));
-    f.buyerFirstName = (f.buyerFirstName || '').trim(); f.buyerLastName = (f.buyerLastName || '').trim();
-    if (!f.buyerFirstName || !f.buyerLastName) { showErr('coErr', 'Please enter the attendee\'s first and last name.'); return; }
-    const attendees = slots.map((_, i) => {
-      if (!i) return {};
-      const v = (k) => ((document.querySelector(`[data-att-${k}="${i}"]`) || {}).value || '').trim();
-      return { name: v('name'), email: v('email') };
-    });
-    const missing = attendees.findIndex((a) => a.email && !a.name);
-    if (missing > 0) { showErr('coErr', `Please enter a name for ticket ${missing + 1}, or clear its email.`); return; }
-    const captcha = cap ? cap.token() : '';
-    if (cap && !captcha) { showErr('coErr', 'Please tick "I\'m not a robot" to complete your purchase.'); return; }
-    const btn = document.getElementById('payBtn'); btn.disabled = true; btn.textContent = 'Processing…';
-    try {
-      if (total > 0 && payProvider() === 'woocommerce') {
-        btn.textContent = 'Opening secure checkout…';
-        const items = Object.entries(qty).filter(([, q]) => q > 0).map(([tierId, q]) => ({ tierId, qty: q, ...(amt[tierId] !== undefined ? { amount: amt[tierId] } : {}) }));
-        await wooCheckout({ carts: [{ eventId: ev.id, items, attendees }], buyerFirstName: f.buyerFirstName, buyerLastName: f.buyerLastName, buyerEmail: f.buyerEmail, buyerPhone: f.buyerPhone, captcha });
-        sessionStorage.removeItem('tj_cart');
-        return;
-      }
-      const { order } = await api(`/api/events/${ev.id}/checkout`, { method: 'POST', body: {
-        items: Object.entries(qty).filter(([, q]) => q > 0).map(([tierId, q]) => ({ tierId, qty: q, ...(amt[tierId] !== undefined ? { amount: amt[tierId] } : {}) })),
-        buyerFirstName: f.buyerFirstName, buyerLastName: f.buyerLastName, buyerEmail: f.buyerEmail, buyerPhone: f.buyerPhone, attendees,
-        payment: { cardHolder: f.cardHolder, cardNumber: f.cardNumber, expiry: f.expiry, cvc: f.cvc }, captcha,
-      } });
-      sessionStorage.removeItem('tj_cart');
-      toast(`You're going! 🎉 ${count} ticket${count > 1 ? 's' : ''} saved to your dashboard`);
-      go('#/order/' + order.id);
-    } catch (err) { showErr('coErr', err.message); btn.disabled = false; btn.textContent = 'Try again'; if (cap) cap.reset(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  };
+  go(cartLoad()[id] ? '#/cart' : '#/event/' + id);
 }
 
 // ---------- log in & security helpers ----------
@@ -2336,7 +2367,7 @@ async function pageAttendees(id) {
       </form>
     </div>
     ${attendees.length ? `<div class="table-wrap"><table><thead><tr><th>Attendee</th><th>Ticket</th><th>Code</th><th>Purchased</th><th>Status</th></tr></thead><tbody>
-      ${attendees.map((a) => `<tr><td><strong>${esc(a.holderName || a.buyerName)}</strong>${a.test ? ' <span class="badge test">Test</span>' : ''}${a.comp ? ' <span class="badge comp">🎁 Comp</span>' : ''}<div class="muted small">${esc(a.holderEmail || a.buyerEmail)}</div>${a.holderName && a.holderName !== a.buyerName ? `<div class="muted small">Bought by ${esc(a.buyerName)}</div>` : ''}${a.comp && a.compNote ? `<div class="muted small">“${esc(a.compNote)}”</div>` : ''}</td><td>${esc(a.tierName)}</td><td class="code" style="font-size:.9rem">${esc(a.code)}</td><td class="small">${esc(fmtShort(a.purchasedAt))}</td>
+      ${attendees.map((a) => `<tr><td><strong>${esc(a.holderName || a.buyerName)}</strong>${a.test ? ' <span class="badge test">Test</span>' : ''}${a.comp ? ' <span class="badge comp">🎁 Comp</span>' : ''}<div class="muted small">${esc(a.holderEmail || a.buyerEmail)}${a.holderPhone ? ` · ${esc(a.holderPhone)}` : ""}</div>${a.holderName && a.holderName !== a.buyerName ? `<div class="muted small">Bought by ${esc(a.buyerName)}</div>` : ''}${a.comp && a.compNote ? `<div class="muted small">“${esc(a.compNote)}”</div>` : ''}</td><td>${esc(a.tierName)}</td><td class="code" style="font-size:.9rem">${esc(a.code)}</td><td class="small">${esc(fmtShort(a.purchasedAt))}</td>
       <td>${a.checkedIn ? `<span class="checked">✓ In at ${esc(fmtTime(a.checkedInAt))}</span>` : `<button class="btn btn-ghost btn-sm" data-ci="${esc(a.code)}">Check in</button>`}</td></tr>`).join('')}
       </tbody></table></div>` : '<div class="empty"><div class="big">🧾</div><h3>No tickets sold yet</h3><p class="muted">Share your event link to start selling.</p></div>'}`;
   const checkin = async (code) => {
@@ -2358,7 +2389,7 @@ async function pageAttendees(id) {
   $app.querySelectorAll('[data-ci]').forEach((b) => (b.onclick = () => checkin(b.dataset.ci)));
   document.getElementById('csvBtn').onclick = () => {
     const q = (x) => `"${String(x ?? '').replace(/"/g, '""')}"`;
-    const csv = ['First Name,Last Name,Email,Ticket,Price,Code,Purchased,Checked In,Complimentary,Attendee Name,Attendee Email', ...attendees.map((a) => [a.buyerFirstName, a.buyerLastName, a.buyerEmail, a.tierName, a.price, a.code, a.purchasedAt, a.checkedIn ? 'yes' : 'no', a.comp ? 'yes' : 'no', a.holderName || a.buyerName, a.holderEmail || a.buyerEmail].map(q).join(','))].join('\n');
+    const csv = ['First Name,Last Name,Email,Ticket,Price,Code,Purchased,Checked In,Complimentary,Attendee Name,Attendee Email,Attendee Phone', ...attendees.map((a) => [a.buyerFirstName, a.buyerLastName, a.buyerEmail, a.tierName, a.price, a.code, a.purchasedAt, a.checkedIn ? 'yes' : 'no', a.comp ? 'yes' : 'no', a.holderName || a.buyerName, a.holderEmail || a.buyerEmail, a.holderPhone || a.buyerPhone || ''].map(q).join(','))].join('\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
     link.download = `${ev.title.replace(/[^\w]+/g, '-')}-attendees.csv`; link.click();

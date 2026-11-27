@@ -1213,16 +1213,24 @@ route('DELETE', '/api/events/:id', ({ req, params }) => {
 });
 
 // Optional name + email for each ticket ("Who's coming?"). Each person with an email gets their own ticket email + PDF.
+// Attendee details for every ticket: first name, last name, email and mobile number are all required.
 function ticketHolders(list, count) {
   const att = Array.isArray(list) ? list : [];
   const out = [];
   for (let i = 0; i < count; i++) {
     const a = att[i] && typeof att[i] === 'object' ? att[i] : {};
-    const name = str(a.name, { name: `Name for ticket ${i + 1}`, max: 80 });
-    const email = str(a.email, { name: `Email for ticket ${i + 1}`, max: 160 }).toLowerCase();
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail(400, `Enter a valid email for ticket ${i + 1}`);
-    if (email && !name) fail(400, `Enter a name for ticket ${i + 1}`);
-    out.push(name ? { holderName: name, ...(email ? { holderEmail: email } : {}) } : {});
+    const T = `Ticket ${i + 1}`;
+    let first = str(a.firstName, { name: `${T} first name`, max: 40 });
+    let last = str(a.lastName, { name: `${T} last name`, max: 40 });
+    if (!first && !last && a.name) { const p = str(a.name, { name: `${T} name`, max: 80 }).split(/\s+/); first = p.length > 1 ? p.slice(0, -1).join(' ') : p[0]; last = p.length > 1 ? p[p.length - 1] : ''; }
+    if (!first) fail(400, `${T}: enter the attendee's first name`);
+    if (!last) fail(400, `${T}: enter the attendee's last name`);
+    const email = str(a.email, { name: `${T} email`, max: 160 }).toLowerCase();
+    if (!email) fail(400, `${T}: enter the attendee's email`);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail(400, `${T}: enter a valid email address`);
+    const phone = normalizePhone(a.phone);
+    if (!phone) fail(400, `${T}: enter a valid mobile number`);
+    out.push({ holderName: `${first} ${last}`, holderFirstName: first, holderLastName: last, holderEmail: email, holderPhone: phone });
   }
   return out;
 }
@@ -1407,7 +1415,7 @@ route('GET', '/api/organizer/events/:id/attendees', ({ req, params }) => {
   const attendees = [];
   for (const o of db.orders.filter((x) => x.eventId === ev.id && x.status !== 'refunded')) {
     for (const t of o.tickets) {
-      attendees.push({ code: t.code, tierName: t.tierName, price: t.price, checkedIn: t.checkedIn, checkedInAt: t.checkedInAt || null, holderName: t.holderName || '', holderEmail: t.holderEmail || '', buyerName: o.buyerName, ...splitName(o), buyerEmail: o.buyerEmail, buyerPhone: o.buyerPhone || '', orderId: o.id, purchasedAt: o.createdAt, test: !!o.test, comp: !!o.comp, compNote: o.compNote || '', issuedBy: o.issuedBy || '' });
+      attendees.push({ code: t.code, tierName: t.tierName, price: t.price, checkedIn: t.checkedIn, checkedInAt: t.checkedInAt || null, holderName: t.holderName || '', holderEmail: t.holderEmail || '', holderPhone: t.holderPhone || '', buyerName: o.buyerName, ...splitName(o), buyerEmail: o.buyerEmail, buyerPhone: o.buyerPhone || '', orderId: o.id, purchasedAt: o.createdAt, test: !!o.test, comp: !!o.comp, compNote: o.compNote || '', issuedBy: o.issuedBy || '' });
     }
   }
   return { event: { ...publicEvent(ev, user), stats: eventStats(ev) }, attendees };
