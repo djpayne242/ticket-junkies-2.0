@@ -48,7 +48,7 @@ final class TJ_Admin {
     $pages = get_option('tj_pages', []);
     $ui = TJ_Frontend::ui();
     $msg = isset($_GET['tj_msg']) ? sanitize_text_field(wp_unslash($_GET['tj_msg'])) : '';
-    $labels = ['home' => 'Homepage', 'event' => 'Event page', 'checkout' => 'Checkout', 'tickets' => 'My Dashboard (attendees)', 'organizer' => 'Organizer Dashboard', 'admin' => 'Admin Panel', 'login' => 'Log In', 'register' => 'Create Account', 'ticket' => 'Ticket viewer'];
+    $labels = ['home' => 'Homepage', 'event' => 'Event page', 'checkout' => 'Ticket Cart (cart & order summary)', 'tickets' => 'My Dashboard (attendees)', 'organizer' => 'Organizer Dashboard', 'admin' => 'Admin Panel', 'login' => 'Log In', 'register' => 'Create Account', 'ticket' => 'Ticket viewer'];
     echo '<div class="wrap"><h1>🎟️ TicketJunkies</h1>';
     if ($msg) echo '<div class="notice notice-success is-dismissible"><p>' . esc_html($msg) . '</p></div>';
     echo '<p style="font-size:14px;max-width:820px">Your ticketing site is built from normal WordPress pages that you can design with <strong>Elementor</strong>. Drag TicketJunkies widgets from the <em>🎟️ TicketJunkies</em> group in the Elementor panel, and change brand colors in Elementor → <em>Site Settings → Global Colors</em> (Primary = blue, Secondary = green, Accent = orange).</p>';

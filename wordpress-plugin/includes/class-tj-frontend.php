@@ -51,6 +51,14 @@ final class TJ_Frontend {
     add_action('wp_enqueue_scripts', [__CLASS__, 'assets']);
     add_action('wp_head', [__CLASS__, 'head'], 1);
     add_action('wp_loaded', [__CLASS__, 'app_endpoints'], 1);
+    add_action('wp_loaded', [__CLASS__, 'repair_pages'], 5);
+    add_action('admin_notices', function () {
+      $r = get_option('tj_page_repaired');
+      if (!is_array($r) || empty($r['at']) || $r['at'] < time() - 7 * DAY_IN_SECONDS || !current_user_can('manage_options')) return;
+      $id = (int) (get_option('tj_pages', [])[$r['key']] ?? 0);
+      if (!$id) return;
+      echo '<div class="notice notice-info is-dismissible"><p><strong>TicketJunkies:</strong> the page <a href="' . esc_url(get_permalink($id)) . '" target="_blank">' . esc_html(get_the_title($id)) . '</a> was missing, so it was rebuilt. ' . ($r['key'] === 'checkout' ? 'It holds the ticket cart ("Go to Cart" opens it) and the order summary. Please keep it published. WooCommerce\'s own "Checkout" page is a different page where buyers type their card.' : 'Please keep it published: buying tickets needs it.') . ' <a href="' . esc_url(admin_url('post.php?post=' . $id . '&action=elementor')) . '">Edit with Elementor</a></p></div>';
+    });
     add_filter('wp_resource_hints', function ($urls, $rel) { if ($rel === 'preconnect') { $urls[] = 'https://fonts.googleapis.com'; $urls[] = ['href' => 'https://fonts.gstatic.com', 'crossorigin' => 'anonymous']; } return $urls; }, 10, 2);
     add_filter('body_class', function ($c) { $c[] = 'tj-page'; return $c; });
     self::hardening();
@@ -401,11 +409,36 @@ final class TJ_Frontend {
 
   public static function page_defs() {
     return [
-      'home' => ['Home', 'home', 'home'], 'event' => ['Event', 'event', 'event'], 'checkout' => ['Checkout', 'checkout', 'checkout'],
+      'home' => ['Home', 'home', 'home'], 'event' => ['Event', 'event', 'event'], 'checkout' => ['Ticket Cart', 'ticket-cart', 'checkout'],
       'tickets' => ['My Dashboard', 'my-tickets', 'tickets'], 'organizer' => ['Organizer Dashboard', 'organizer', 'organizer'],
       'admin' => ['Admin Panel', 'ticket-admin', 'admin'], 'login' => ['Log In', 'login', 'login'], 'register' => ['Create Account', 'register', 'register'],
       'ticket' => ['Your Tickets', 'ticket', 'ticket'], 'scanner' => ['Ticket Scanner', 'scanner', 'scanner'],
     ];
+  }
+
+  /**
+   * Pages the ticket buying steps cannot work without. If one is deleted, unpublished or taken over by another page,
+   * it is rebuilt automatically (the cart lives on the "checkout" page: without it "Go to Cart" had nowhere to go).
+   */
+  const REQUIRED_PAGES = ['event', 'checkout'];
+  public static function repair_pages() {
+    if (!apply_filters('tj_repair_pages', true)) return;
+    $pages = get_option('tj_pages', []);
+    if (!is_array($pages) || !$pages) return; // first set-up happens in the dashboard
+    foreach (self::REQUIRED_PAGES as $key) {
+      $id = isset($pages[$key]) ? (int) $pages[$key] : 0;
+      $ok = $id && get_post_status($id) === 'publish' && get_post_type($id) === 'page'
+        // a WooCommerce page (e.g. its own "Checkout") must never stand in for a TicketJunkies page
+        && !in_array($id, array_map('intval', array_filter([get_option('woocommerce_checkout_page_id'), get_option('woocommerce_cart_page_id')])), true);
+      if ($ok) continue;
+      // Not published any more (draft, trash or deleted) or used by WooCommerce: build it again under its own address
+      $reuse = $id && get_post_status($id) && get_post_status($id) !== 'trash' && get_post_meta($id, '_tj_page', true) === $key
+        && !in_array($id, array_map('intval', array_filter([get_option('woocommerce_checkout_page_id'), get_option('woocommerce_cart_page_id')])), true);
+      if (!$reuse) { unset($pages[$key]); update_option('tj_pages', $pages); }
+      self::install(true, $key);
+      update_option('tj_page_repaired', ['key' => $key, 'at' => time()], false);
+      $pages = get_option('tj_pages', []);
+    }
   }
 
   /** Creates the pages (built with Elementor when it is active) and Elementor site settings. Safe to run again. */

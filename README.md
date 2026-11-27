@@ -20,6 +20,11 @@ TicketJunkies 2.0 is the fresh home for the project. It starts from everything t
 - **Includes v1.3.7 and v1.3.8** (not yet on the live site, which runs 1.3.6): weather, map, events and calendar follow the visitor's location; secure payment section with Visa / Mastercard / Amex logos; My Tickets / My Dashboard menu link in a green box.
 - Everything else (ticket scanner, shopping cart, organizer and admin dashboards, mobile app) is carried over unchanged.
 
+## What's new in 2.0.8 — "Go to Cart" works again
+- **Tickets go into the cart again.** The cart lives on the TicketJunkies **Checkout** page. On the live site that page had been unpublished, and a WooCommerce page called "Checkout" had taken its address (`/checkout/`). **Go to Cart** therefore had nowhere to go: it landed on the home page and the tickets never showed up in a cart.
+- **The cart page now repairs itself.** It is called **Ticket Cart** and has its own address, `/ticket-cart/`, so it can't clash with WooCommerce's own Checkout page again. If it is ever deleted, unpublished or taken over by WooCommerce, the plugin rebuilds it automatically and shows a note in the dashboard. The Event page is protected the same way.
+- Two pages, two jobs: **Ticket Cart** (`/ticket-cart/`) is where buyers review tickets and attendees. WooCommerce's **Checkout** page is where they type their card. Keep both published.
+
 ## What's new in 2.0.7 — checkout page fixed (card form + Elementor)
 - **Buyers can enter their card details again.** WooCommerce had no checkout page of its own: when it was installed it found the TicketJunkies page called "Checkout" and treated that as its payment page, or ended up with none at all. Buyers were sent back to the TicketJunkies screen or the home page and never saw the card form. The plugin now makes sure WooCommerce always has its own **Secure Checkout** page (address `/secure-checkout/`, built with Elementor) holding the WooCommerce checkout form, which works with every payment gateway. It reuses an existing WooCommerce checkout page if one exists, and repairs the setting automatically if it ever points at a TicketJunkies page again.
 - **The checkout page can be edited with Elementor.** WooCommerce used to bounce its checkout page to the cart whenever the cart was empty, including inside the Elementor editor. Editors can now open it normally.
