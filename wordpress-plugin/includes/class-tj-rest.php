@@ -113,6 +113,7 @@ class TJ_Rest {
     self::route('DELETE', '/events/:id', 'r_event_delete');
     self::route('POST', '/events/:id/checkout', 'r_checkout');
     self::route('POST', '/cart/checkout', 'r_cart_checkout');
+    self::route('POST', '/woo/cart', 'r_woo_cart');
     self::route('POST', '/events/:id/comp', 'r_comp');
     self::route('GET', '/orders', 'r_orders');
     self::route('GET', '/orders/:id', 'r_order');
@@ -692,6 +693,7 @@ class TJ_Rest {
       'categories' => TJ_Store::$CATEGORIES, 'feePercent' => $s['feePercent'], 'feeFixed' => $s['feeFixed'],
       'maps' => array('googleMapsKey' => $m['googleMapsKey'], 'center' => array('lat' => $m['weatherLat'], 'lng' => $m['weatherLng']), 'country' => (string) self::g($m, 'country', '')),
       'captcha' => self::captcha_public(),
+      'payments' => class_exists('TJ_Woo') ? TJ_Woo::meta() : array('provider' => 'none'),
       'preloader' => $s['preloader'],
       'security' => array('idleMinutes' => (int) $s['security']['idleMinutes'], 'allowReset' => (bool) $s['security']['allowReset'], 'minPassword' => (int) $s['security']['minPassword']),
       'weatherPlace' => array('name' => $m['weatherPlace'], 'lat' => $m['weatherLat'], 'lng' => $m['weatherLng']),
@@ -1084,10 +1086,15 @@ class TJ_Rest {
     foreach ($done as $d) $views[] = self::order_view($d['order']);
     return array('cartId' => $cartId, 'orders' => $views);
   }
-  private static function checkout_locked($user, $id, $body, $dry = false, $cartId = '') {
+  /**
+   * $opts['woo']   = true: paid through WooCommerce, so no card fields here ($opts['pay'] holds the payment details).
+   * $opts['force'] = true: WooCommerce already took the payment, so tickets are issued even if a limit changed since the cart was checked.
+   */
+  private static function checkout_locked($user, $id, $body, $dry = false, $cartId = '', $opts = array()) {
+    $force = !empty($opts['force']);
     $ev = TJ_Store::get_event($id);
-    if (!$ev || $ev['status'] !== 'published') self::fail(404, 'This event is not available for purchase');
-    if (TJ_Store::ts_ms($ev['endsAt']) < self::now_ms()) self::fail(400, 'This event has already ended');
+    if (!$ev || (!$force && $ev['status'] !== 'published')) self::fail(404, 'This event is not available for purchase');
+    if (!$force && TJ_Store::ts_ms($ev['endsAt']) < self::now_ms()) self::fail(400, 'This event has already ended');
     $items = is_array(self::g($body, 'items')) && wp_is_numeric_array($body['items']) ? $body['items'] : array();
     $lines = array();
     foreach ($items as $it) {
@@ -1096,9 +1103,10 @@ class TJ_Rest {
       if (is_nan($qty) || !$qty) continue;
       if (!self::is_integer_num($qty) || $qty < 0 || $qty > 100) self::fail(400, 'You can buy up to 100 of each ticket type');
       $ti = null;
-      foreach ($ev['tiers'] as $k => $t) if ($t['id'] === self::g($it, 'tierId') && self::is_public_tier($t)) { $ti = $k; break; }
+      foreach ($ev['tiers'] as $k => $t) if ($t['id'] === self::g($it, 'tierId') && ($force || self::is_public_tier($t))) { $ti = $k; break; }
       if ($ti === null) { $gone = false; foreach ($ev['tiers'] as $t) if ($t['id'] === self::g($it, 'tierId') && (!empty($t['cancelled']) || !empty($t['deleted']))) $gone = true; self::fail(400, $gone ? 'This ticket type is no longer on sale' : 'Unknown ticket type'); }
       $tier = $ev['tiers'][$ti];
+      if (!$force) {
       if ($tier['quantity'] - $tier['sold'] < $qty) self::fail(409, 'Only ' . ($tier['quantity'] - $tier['sold']) . ' "' . $tier['name'] . '" tickets left');
       $mpp = (int) self::g($tier, 'maxPerPerson', 0);
       if ($mpp) {
@@ -1107,12 +1115,13 @@ class TJ_Rest {
       } elseif ($qty > 10) self::fail(400, 'You can buy up to 10 of each ticket type');
       if (self::tier_sale_state($tier) === 'soon') self::fail(400, '"' . $tier['name'] . '" tickets are not on sale yet');
       if (self::tier_sale_state($tier) === 'closed') self::fail(400, 'Sales for "' . $tier['name'] . '" have ended');
+      }
       // donation tickets: the buyer picks the amount per ticket, at least the organizer's minimum
       $kind = self::tier_kind($tier);
       $unit = $kind === 'free' ? 0 : (float) $tier['price'];
       if ($kind === 'donation') {
         $unit = self::round2(self::numk($it, 'amount'));
-        if (!self::finite($unit) || $unit < (float) $tier['price']) self::fail(400, 'Enter a donation of at least ' . TJ_Notify::money($tier['price']) . ' for "' . $tier['name'] . '"');
+        if (!$force && (!self::finite($unit) || $unit < (float) $tier['price'])) self::fail(400, 'Enter a donation of at least ' . TJ_Notify::money($tier['price']) . ' for "' . $tier['name'] . '"');
         if ($unit > 10000) self::fail(400, 'Donations are limited to $10000.00 per ticket');
       }
       $lines[] = array('ti' => $ti, 'qty' => (int) $qty, 'unit' => $unit, 'donation' => $kind === 'donation');
@@ -1139,22 +1148,16 @@ class TJ_Rest {
     $subtotal = self::round2($subtotal); $fees = self::round2($fees);
     $total = self::round2($subtotal + $fees);
 
-    // DEMO PAYMENT: validates card format only. Replace with a real processor before going live.
-    // Card data: only brand, last 4, name on card and a one-way fingerprint are kept (never full numbers or CVC).
+    // REAL PAYMENTS ONLY: paid tickets are charged by the store's WooCommerce payment gateway (TJ_Woo).
+    // Tickets are only issued after WooCommerce confirms the payment; a declined card never gets tickets.
+    // No card numbers ever pass through TicketJunkies.
     $card = array('cardLast4' => '', 'cardBrand' => '', 'cardHolder' => '', 'cardFingerprint' => '');
     if ($total > 0) {
-      $p = is_array(self::g($body, 'payment')) ? $body['payment'] : array();
-      $num = preg_replace('/\D/', '', is_scalar(self::g($p, 'cardNumber')) ? (string) $p['cardNumber'] : '');
-      if (strlen($num) < 13 || strlen($num) > 19 || !self::luhn_ok($num)) self::fail(400, 'Enter a valid card number');
-      $exp = trim(is_scalar(self::g($p, 'expiry')) ? (string) $p['expiry'] : '');
-      if (!preg_match('~^(0[1-9]|1[0-2])/\d{2}$~', $exp)) self::fail(400, 'Expiry must be MM/YY');
-      list($mm, $yy) = array_map('intval', explode('/', $exp));
-      $now = new DateTime('now', wp_timezone());
-      $cy = (int) $now->format('Y'); $cm = (int) $now->format('n');
-      if (2000 + $yy < $cy || (2000 + $yy === $cy && $mm < $cm)) self::fail(400, 'This card has expired');
-      if (!preg_match('/^\d{3,4}$/', trim(is_scalar(self::g($p, 'cvc')) ? (string) $p['cvc'] : ''))) self::fail(400, 'Enter a valid CVC');
-      $cardHolder = self::str(self::g($p, 'cardHolder'), 'Name on card', 80, true);
-      $card = self::card_info($num, $cardHolder);
+      if (empty($opts['woo'])) {
+        if (class_exists('TJ_Woo') && TJ_Woo::active()) self::fail(400, 'Card payments now go through our secure checkout. Please refresh the page and try again.');
+        self::fail(503, 'Online card payments are not set up yet. Please try again later.');
+      }
+      if (!empty($opts['pay']) && is_array($opts['pay'])) $card = array_merge($card, $opts['pay']);
     }
 
     if ($dry) return null;
@@ -1179,6 +1182,73 @@ class TJ_Rest {
     if ($cartId !== '') return array('order' => $order, 'ev' => $ev);
     TJ_Notify::order_placed($order, $ev);
     return array('order' => self::order_view($order));
+  }
+
+  /** WooCommerce: check a cart line group before payment (throws TJ_Fail with a buyer-friendly message). */
+  public static function woo_check($user, $eventId, $body) {
+    TJ_Store::flush_cache();
+    self::checkout_locked($user, $eventId, $body, true, '', array('woo' => true));
+  }
+  /** WooCommerce: payment confirmed — issue the tickets. Returns array('order' => ..., 'ev' => ...). */
+  public static function woo_issue($user, $eventId, $body, $pay, $groupId) {
+    $lock = TJ_Store::lock('event_' . $eventId);
+    try {
+      TJ_Store::flush_cache();
+      return self::checkout_locked($user, $eventId, $body, false, $groupId, array('woo' => true, 'force' => true, 'pay' => $pay));
+    } finally {
+      TJ_Store::unlock($lock);
+    }
+  }
+  /** Mark a TicketJunkies order refunded and put its tickets back on sale (no payment refund here). */
+  public static function mark_refunded($o, $testerEmail = '') {
+    if ($o['status'] === 'refunded') return $o;
+    $ev = TJ_Store::get_event($o['eventId']);
+    if ($ev && empty($o['test'])) {
+      foreach ($o['items'] as $it) {
+        foreach ($ev['tiers'] as $k => $t) {
+          if ($t['id'] !== $it['tierId']) continue;
+          $ev['tiers'][$k]['sold'] = max(0, $t['sold'] - $it['qty']);
+          if (!empty($o['comp'])) $ev['tiers'][$k]['comped'] = max(0, (int) self::g($t, 'comped', 0) - $it['qty']);
+        }
+      }
+      TJ_Store::save_event($ev);
+    }
+    $o['status'] = 'refunded';
+    $o['refundedAt'] = TJ_Store::now_iso();
+    TJ_Store::save_order($o);
+    TJ_Notify::with_sandbox(!empty($o['test']) && $testerEmail ? array('orderId' => $o['id'], 'testerEmail' => $testerEmail) : null, function () use ($o) { TJ_Notify::order_refunded($o); });
+    return $o;
+  }
+
+  /** Paid tickets: validate everything, put the tickets in the WooCommerce cart and send the buyer to the store's checkout. */
+  public static function r_woo_cart($c) {
+    $user = self::require_user();
+    self::rate_limit('checkout', 20, 10 * MINUTE_IN_SECONDS);
+    if (!class_exists('TJ_Woo') || !TJ_Woo::active()) self::fail(503, 'Online card payments are not set up yet. Please try again later.');
+    $b = $c['body'];
+    $carts = array();
+    $list = is_array(self::g($b, 'carts')) && wp_is_numeric_array($b['carts']) ? $b['carts'] : array();
+    foreach ($list as $x) if (is_array($x)) $carts[] = $x;
+    if (!$carts) self::fail(400, 'Your cart is empty');
+    if (count($carts) > 20) self::fail(400, 'Your cart can hold tickets for up to 20 events at a time');
+    $ids = array();
+    foreach ($carts as $x) $ids[] = is_scalar(self::g($x, 'eventId')) ? (string) $x['eventId'] : '';
+    if (count(array_unique($ids)) !== count($ids)) self::fail(400, 'Each event can only be in your cart once');
+    self::require_captcha($b, 'checkout');
+    $shared = array();
+    foreach (array('buyerFirstName', 'buyerLastName', 'buyerName', 'buyerEmail', 'buyerPhone') as $k) if (array_key_exists($k, $b)) $shared[$k] = $b[$k];
+    $groups = array();
+    foreach ($carts as $i => $x) {
+      $ev = TJ_Store::get_event($ids[$i]);
+      if (!$ev) self::fail(404, 'One of the events in your cart is no longer available. Please remove it and try again.');
+      $body = array_merge($shared, array('items' => self::g($x, 'items'), 'attendees' => self::g($x, 'attendees')));
+      try { self::woo_check($user, $ids[$i], $body); }
+      catch (TJ_Fail $e) { if (count($carts) > 1) throw new TJ_Fail($e->status, $ev['title'] . ': ' . $e->getMessage()); throw $e; }
+      $groups[] = array('ev' => $ev, 'body' => $body);
+    }
+    try { $url = TJ_Woo::fill_cart($user, $groups); }
+    catch (Exception $e) { self::fail(500, 'We could not start the secure checkout: ' . $e->getMessage()); }
+    return array('redirect' => $url);
   }
 
   /** Complimentary tickets: organizer (own events) or admin issues free tickets from any ticket type, public or private. */
@@ -1817,22 +1887,15 @@ class TJ_Rest {
     $o = TJ_Store::get_order($c['params']['id']);
     if (!$o) self::fail(404, 'Order not found');
     if ($o['status'] === 'refunded') self::fail(409, 'This order was already refunded');
-    $ev = TJ_Store::get_event($o['eventId']);
-    if ($ev && empty($o['test'])) {
-      foreach ($o['items'] as $it) {
-        foreach ($ev['tiers'] as $k => $t) {
-          if ($t['id'] !== $it['tierId']) continue;
-          $ev['tiers'][$k]['sold'] = max(0, $t['sold'] - $it['qty']);
-          if (!empty($o['comp'])) $ev['tiers'][$k]['comped'] = max(0, (int) self::g($t, 'comped', 0) - $it['qty']);
-        }
-      }
-      TJ_Store::save_event($ev);
+    // Paid through WooCommerce: refund the money through the store's payment gateway first.
+    if (empty($o['test']) && !empty($o['wcOrderId']) && (float) $o['total'] > 0) {
+      if (!class_exists('TJ_Woo') || !TJ_Woo::active()) self::fail(503, 'WooCommerce is not active, so this payment cannot be refunded from here. Refund it in your payment provider, then try again.');
+      $err = TJ_Woo::refund_payment($o);
+      if ($err) self::fail(502, $err);
+      $o = TJ_Store::get_order($o['id']);
+      if ($o['status'] === 'refunded') return array('order' => self::admin_order($o));
     }
-    // DEMO: when real payments are connected, issue the processor refund here.
-    $o['status'] = 'refunded';
-    $o['refundedAt'] = TJ_Store::now_iso();
-    TJ_Store::save_order($o);
-    TJ_Notify::with_sandbox(!empty($o['test']) ? array('orderId' => $o['id'], 'testerEmail' => $admin['email']) : null, function () use ($o) { TJ_Notify::order_refunded($o); });
+    $o = self::mark_refunded($o, $admin['email']);
     return array('order' => self::admin_order($o));
   }
 

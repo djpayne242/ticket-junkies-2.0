@@ -20,6 +20,15 @@ TicketJunkies 2.0 is the fresh home for the project. It starts from everything t
 - **Includes v1.3.7 and v1.3.8** (not yet on the live site, which runs 1.3.6): weather, map, events and calendar follow the visitor's location; secure payment section with Visa / Mastercard / Amex logos; My Tickets / My Dashboard menu link in a green box.
 - Everything else (ticket scanner, shopping cart, organizer and admin dashboards, mobile app) is carried over unchanged.
 
+## What's new in 2.0.4 — real payments through WooCommerce
+- **Paid tickets are charged by your WooCommerce payment gateway.** The old card form was a demo: it only checked that a card number *looked* valid and never contacted a bank, so any card (even a locked one) "worked" and no money was taken. It is removed from the WordPress plugin.
+- **Every ticket type is a WooCommerce product** (hidden from the shop, category *Event tickets*), kept in sync automatically: name, price, sold/cancelled state. Existing events are synced when you update the plugin.
+- **Checkout:** buyers fill in their ticket details on the event checkout, then click *Continue to secure payment* and pay on your WooCommerce checkout page. The TicketJunkies service fee is added as a *Ticket service fee* line.
+- **Tickets are issued only after the payment is approved** (order status Processing or Completed). Declined, failed, pending and on-hold payments get no tickets. Bank-transfer / cheque orders get their tickets when you mark them Processing.
+- **Refunds:** refunding a ticket order in the TicketJunkies Admin Panel refunds the payment through WooCommerce (automatically if your gateway supports refunds). Refunding or cancelling the whole order in WooCommerce cancels its tickets.
+- **Free tickets** still go straight through without the store checkout.
+- Requires WooCommerce with at least one payment method switched on. Without it, paid tickets can't be bought (the site says online payments aren't available).
+
 ## What's new in 2.0.3
 - **Reorder ticket types:** in Create / Edit event, drag a ticket by its ⠿ handle (or use the ↑ ↓ buttons) to set the order. Click **Save changes** and the event page shows the tickets in that order. Works with a mouse and on phones/tablets.
 

@@ -1202,6 +1202,31 @@ const CARD_LOGOS = {
   mastercard: '<svg viewBox="0 0 64 40" width="64" height="40" role="img" aria-label="Mastercard"><rect width="64" height="40" rx="6" fill="#fff" stroke="#d9dde5"/><circle cx="26" cy="17" r="10" fill="#EB001B"/><circle cx="38" cy="17" r="10" fill="#F79E1B"/><path d="M32 9a10 10 0 0 1 0 16 10 10 0 0 1 0-16z" fill="#FF5F00"/><text x="32" y="35" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="6.2" font-weight="700" fill="#231F20">mastercard</text></svg>',
   amex: '<svg viewBox="0 0 64 40" width="64" height="40" role="img" aria-label="American Express"><rect width="64" height="40" rx="6" fill="#006FCF"/><text x="32" y="18" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="8.6" font-weight="900" fill="#fff" letter-spacing=".3">AMERICAN</text><text x="32" y="29" text-anchor="middle" font-family="Arial Black, Arial, Helvetica, sans-serif" font-size="8.6" font-weight="900" fill="#fff" letter-spacing=".3">EXPRESS</text></svg>',
 };
+// ---------- payments ----------
+// WordPress: paid tickets are charged by the store's WooCommerce payment gateway (META.payments.provider = 'woocommerce').
+// Stand-alone site: META.payments is not set, so the demo card form is used.
+const payProvider = () => (META.payments ? META.payments.provider : 'demo');
+const payButtonText = (total) => (payProvider() === 'woocommerce' ? `🔒 Continue to secure payment · ${money(total)}` : `🔒 Pay ${money(total)}`);
+function paymentFieldsHtml() {
+  if (payProvider() === 'woocommerce') {
+    const gw = (META.payments.gateways || []).filter(Boolean);
+    return `<div class="woo-pay-note"><span class="woo-pay-ic" aria-hidden="true">🔒</span><div><strong>You'll pay on our secure checkout page next.</strong><span>Your card is charged by our payment provider${gw.length ? ` (${esc(gw.join(', '))})` : ''}. Your tickets are issued only after the payment is approved, and we never see or store your card number.</span></div></div>`;
+  }
+  if (payProvider() === 'none') return '<div class="notice">Online card payments are not available right now. Please try again later or contact the organizer.</div>';
+  return `<div class="notice">Demo mode — no real charge. Use any test card, e.g. 4242 4242 4242 4242.</div>
+          <div class="field"><label>Name on card</label><input name="cardHolder" autocomplete="cc-name" required value="${esc(me.name)}" /></div>
+          <div class="field"><label>Card number</label><input name="cardNumber" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456" required /></div>
+          <div class="row"><div class="field"><label>Expiry</label><input name="expiry" placeholder="MM/YY" autocomplete="cc-exp" required /></div>
+          <div class="field"><label>CVC</label><input name="cvc" inputmode="numeric" placeholder="123" autocomplete="cc-csc" required /></div></div>`;
+}
+// Send paid tickets to the WooCommerce checkout. Returns true when the browser is being redirected.
+async function wooCheckout(body) {
+  const r = await api('/api/woo/cart', { method: 'POST', body });
+  try { localStorage.setItem('tj_woo_pending', String(Date.now())); } catch {}
+  location.href = r.redirect;
+  return true;
+}
+
 // green shield with a padlock: "secure payment" logo
 const SECURE_BADGE = '<svg class="sc-shield" viewBox="0 0 48 56" width="44" height="52" aria-hidden="true"><path d="M24 2 4 9v16c0 13.2 8.4 24.6 20 29 11.6-4.4 20-15.8 20-29V9L24 2z" fill="#2f9e44"/><path d="M24 6.3 8 11.9V25c0 10.9 6.7 20.4 16 24.4 9.3-4 16-13.5 16-24.4V11.9L24 6.3z" fill="#84d65f"/><rect x="15" y="25" width="18" height="14" rx="2.5" fill="#12350a"/><path d="M18.5 25v-4a5.5 5.5 0 0 1 11 0v4" fill="none" stroke="#12350a" stroke-width="3"/><circle cx="24" cy="31" r="2" fill="#84d65f"/><rect x="23" y="31" width="2" height="4.5" rx="1" fill="#84d65f"/></svg>';
 function secureCheckoutHtml() {
@@ -1257,13 +1282,9 @@ async function pageCartCheckout() {
             </div>`).join('')}</div></div>` : '').join('')}` : ''}
           ${t.total > 0 ? `
           <h3 style="margin-top:10px">💳 Payment</h3>
-          <div class="notice">Demo mode — no real charge. Use any test card, e.g. 4242 4242 4242 4242.</div>
-          <div class="field"><label>Name on card</label><input name="cardHolder" autocomplete="cc-name" required value="${esc(me.name)}" /></div>
-          <div class="field"><label>Card number</label><input name="cardNumber" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456" required /></div>
-          <div class="row"><div class="field"><label>Expiry</label><input name="expiry" placeholder="MM/YY" autocomplete="cc-exp" required /></div>
-          <div class="field"><label>CVC</label><input name="cvc" inputmode="numeric" placeholder="123" autocomplete="cc-csc" required /></div></div>` : ''}
+          ${paymentFieldsHtml()}` : ''}
           ${META.captcha?.checkout ? '<div class="captcha-box" id="ccCaptcha"></div>' : ''}
-          <button class="btn btn-primary btn-block btn-lg" id="ccPay">${t.total > 0 ? `🔒 Pay ${money(t.total)}` : 'Get my free tickets'}</button>
+          <button class="btn btn-primary btn-block btn-lg" id="ccPay" ${t.total > 0 && payProvider() === 'none' ? 'disabled' : ''}>${t.total > 0 ? payButtonText(t.total) : 'Get my free tickets'}</button>
           <p class="muted small" style="text-align:center;margin:10px 0 0">One payment for everything. You'll get each event's QR tickets by email and text, and they'll always be in your dashboard.</p>
         </form>
       </div>
@@ -1298,6 +1319,12 @@ async function pageCartCheckout() {
     if (cap && !captcha) { showErr('coErr', 'Please tick "I\'m not a robot" to complete your purchase.'); return; }
     const btn = document.getElementById('ccPay'); btn.disabled = true; btn.textContent = 'Processing…';
     try {
+      if (t.total > 0 && payProvider() === 'woocommerce') {
+        btn.textContent = 'Opening secure checkout…';
+        await wooCheckout({ carts, buyerFirstName: f.buyerFirstName, buyerLastName: f.buyerLastName, buyerEmail: f.buyerEmail, buyerPhone: f.buyerPhone, captcha });
+        cartSave({}); sessionStorage.removeItem('tj_cart');
+        return;
+      }
       const r = await api('/api/cart/checkout', { method: 'POST', body: {
         carts, buyerFirstName: f.buyerFirstName, buyerLastName: f.buyerLastName, buyerEmail: f.buyerEmail, buyerPhone: f.buyerPhone,
         payment: { cardHolder: f.cardHolder, cardNumber: f.cardNumber, expiry: f.expiry, cvc: f.cvc }, captcha,
@@ -1380,13 +1407,9 @@ async function pageCheckout(id) {
             </div>`).join('')}</div>` : ''}
           ${total > 0 ? `
           <h3 style="margin-top:10px">💳 Payment</h3>
-          <div class="notice">Demo mode — no real charge. Use any test card, e.g. 4242 4242 4242 4242.</div>
-          <div class="field"><label>Name on card</label><input name="cardHolder" autocomplete="cc-name" required value="${esc(me.name)}" /></div>
-          <div class="field"><label>Card number</label><input name="cardNumber" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456" required /></div>
-          <div class="row"><div class="field"><label>Expiry</label><input name="expiry" placeholder="MM/YY" autocomplete="cc-exp" required /></div>
-          <div class="field"><label>CVC</label><input name="cvc" inputmode="numeric" placeholder="123" autocomplete="cc-csc" required /></div></div>` : ''}
+          ${paymentFieldsHtml()}` : ''}
           ${META.captcha?.checkout ? '<div class="captcha-box" id="coCaptcha"></div>' : ''}
-          <button class="btn btn-primary btn-block btn-lg" id="payBtn">${total > 0 ? `🔒 Pay ${money(total)}` : 'Get my free tickets'}</button>
+          <button class="btn btn-primary btn-block btn-lg" id="payBtn" ${total > 0 && payProvider() === 'none' ? 'disabled' : ''}>${total > 0 ? payButtonText(total) : 'Get my free tickets'}</button>
           <p class="muted small" style="text-align:center;margin:10px 0 0">You'll get your QR tickets by email and text, and they'll always be in your dashboard to view or download.</p>
         </form>
       </div>
@@ -1421,6 +1444,13 @@ async function pageCheckout(id) {
     if (cap && !captcha) { showErr('coErr', 'Please tick "I\'m not a robot" to complete your purchase.'); return; }
     const btn = document.getElementById('payBtn'); btn.disabled = true; btn.textContent = 'Processing…';
     try {
+      if (total > 0 && payProvider() === 'woocommerce') {
+        btn.textContent = 'Opening secure checkout…';
+        const items = Object.entries(qty).filter(([, q]) => q > 0).map(([tierId, q]) => ({ tierId, qty: q, ...(amt[tierId] !== undefined ? { amount: amt[tierId] } : {}) }));
+        await wooCheckout({ carts: [{ eventId: ev.id, items, attendees }], buyerFirstName: f.buyerFirstName, buyerLastName: f.buyerLastName, buyerEmail: f.buyerEmail, buyerPhone: f.buyerPhone, captcha });
+        sessionStorage.removeItem('tj_cart');
+        return;
+      }
       const { order } = await api(`/api/events/${ev.id}/checkout`, { method: 'POST', body: {
         items: Object.entries(qty).filter(([, q]) => q > 0).map(([tierId, q]) => ({ tierId, qty: q, ...(amt[tierId] !== undefined ? { amount: amt[tierId] } : {}) })),
         buyerFirstName: f.buyerFirstName, buyerLastName: f.buyerLastName, buyerEmail: f.buyerEmail, buyerPhone: f.buyerPhone, attendees,

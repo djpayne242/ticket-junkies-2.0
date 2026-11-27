@@ -193,12 +193,14 @@ class TJ_Store {
     if (self::event_exists($ev['id'])) $wpdb->update(self::table('events'), $row, array('id' => $ev['id']));
     else { $row['id'] = $ev['id']; $wpdb->insert(self::table('events'), $row); }
     self::$events_cache = null;
+    do_action('tj_event_saved', $ev);
     return $ev;
   }
   public static function delete_event($id) {
     global $wpdb;
     $wpdb->delete(self::table('events'), array('id' => $id));
     self::$events_cache = null;
+    do_action('tj_event_deleted', $id);
   }
 
   // ---------- orders ----------

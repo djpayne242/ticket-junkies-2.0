@@ -1387,6 +1387,12 @@ html[data-theme="dark"] .tj-root .area-gps { color: #8fb6ec; }
 .tj-root .tiers-sorting, .tj-root .tiers-sorting * { cursor: grabbing !important; user-select: none; }
 .tj-root .tier-row.tier-dragging { outline: 2px solid #84d65f; box-shadow: 0 10px 24px rgba(0,0,0,.25); opacity: .92; position: relative; z-index: 2; }
 
+/* WooCommerce secure payment note on checkout */
+.tj-root .woo-pay-note { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: rgba(132,214,95,.12); border: 1px solid rgba(47,158,68,.35); margin-bottom: 12px; }
+.tj-root .woo-pay-ic { font-size: 1.4rem; line-height: 1.2; }
+.tj-root .woo-pay-note strong { display: block; }
+.tj-root .woo-pay-note span { display: block; font-size: .88rem; color: var(--muted); margin-top: 2px; }
+
 
 /* =========================================================
    WordPress / Elementor integration
