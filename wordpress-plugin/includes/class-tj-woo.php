@@ -25,6 +25,12 @@ final class TJ_Woo {
     add_action('tj_event_deleted', array(__CLASS__, 'event_deleted'));
     add_action('admin_init', array(__CLASS__, 'maybe_sync_all'));
     add_action('admin_notices', array(__CLASS__, 'admin_notice'));
+    // WooCommerce needs its own checkout page (the card form). Create or repair it automatically.
+    add_action('wp_loaded', array(__CLASS__, 'ensure_checkout_page'), 20);
+    // WooCommerce → Tools → "Create default pages" must never take over the TicketJunkies "checkout" page
+    add_filter('woocommerce_create_page_id', array(__CLASS__, 'avoid_tj_pages'), 10, 3);
+    // Elementor can open the checkout page to edit it even when the cart is empty
+    add_filter('woocommerce_checkout_redirect_empty_cart', array(__CLASS__, 'editor_no_redirect'));
     // cart
     add_filter('woocommerce_add_to_cart_validation', array(__CLASS__, 'block_direct_add'), 10, 2);
     add_action('woocommerce_before_calculate_totals', array(__CLASS__, 'cart_prices'), 20);
@@ -122,6 +128,85 @@ final class TJ_Woo {
     update_option('tj_woo_synced', $ver, false);
   }
 
+  // =====================================================================
+  // WooCommerce checkout page (where buyers type their card details)
+  // =====================================================================
+  /** True when $id is a published page that WooCommerce can use as its checkout (not a TicketJunkies screen page). */
+  public static function checkout_page_ok($id) {
+    $id = (int) $id;
+    if ($id <= 0 || get_post_type($id) !== 'page' || get_post_status($id) !== 'publish') return false;
+    if (get_post_meta($id, '_tj_page', true)) return false;
+    $tj = get_option('tj_pages', array());
+    return !in_array($id, array_map('intval', is_array($tj) ? $tj : array()), true);
+  }
+
+  /** Content of the WooCommerce checkout page: the classic checkout form, which works with every payment gateway. */
+  const CHECKOUT_SHORTCODE = '[woocommerce_checkout]';
+
+  /**
+   * Makes sure WooCommerce has its own checkout page. Runs on every request but only does work when the page
+   * is missing, unpublished, or pointing at a TicketJunkies page.
+   */
+  public static function ensure_checkout_page() {
+    if (!self::active() || !function_exists('wc_get_page_id')) return;
+    if (!apply_filters('tj_manage_checkout_page', true)) return;
+    $cur = (int) get_option('woocommerce_checkout_page_id');
+    if (self::checkout_page_ok($cur)) return;
+    // Reuse a published page that already holds the checkout form (shortcode or block), if there is one
+    $id = 0;
+    $found = get_posts(array('post_type' => 'page', 'post_status' => 'publish', 'numberposts' => 20, 'fields' => 'ids', 's' => 'woocommerce_checkout', 'suppress_filters' => true));
+    foreach ($found as $pid) {
+      $c = (string) get_post_field('post_content', $pid);
+      if ((strpos($c, '[woocommerce_checkout') !== false || strpos($c, 'wp:woocommerce/checkout') !== false) && self::checkout_page_ok($pid)) { $id = (int) $pid; break; }
+    }
+    if (!$id) {
+      $existing = get_page_by_path('secure-checkout', OBJECT, 'page');
+      if ($existing && self::checkout_page_ok($existing->ID)) $id = (int) $existing->ID;
+    }
+    if (!$id) {
+      $id = wp_insert_post(array(
+        'post_title' => 'Secure Checkout', 'post_name' => 'secure-checkout', 'post_type' => 'page', 'post_status' => 'publish',
+        'post_content' => '<!-- wp:shortcode -->' . self::CHECKOUT_SHORTCODE . '<!-- /wp:shortcode -->', 'comment_status' => 'closed',
+      ));
+      if (!$id || is_wp_error($id)) return;
+      $id = (int) $id;
+      self::elementor_checkout_layout($id);
+    }
+    update_option('woocommerce_checkout_page_id', $id);
+    update_option('tj_checkout_page_fixed', time(), false);
+  }
+
+  /** Build the new checkout page with Elementor (when installed) so it can be designed like the other pages. */
+  private static function elementor_checkout_layout($id) {
+    if (!did_action('elementor/loaded') && !defined('ELEMENTOR_VERSION')) return;
+    $eid = function () { return substr(md5(uniqid('', true)), 0, 7); };
+    $px = function ($t, $r, $b, $l) { return array('unit' => 'px', 'top' => (string) $t, 'right' => (string) $r, 'bottom' => (string) $b, 'left' => (string) $l, 'isLinked' => false); };
+    $data = array(array(
+      'id' => $eid(), 'elType' => 'container', 'isInner' => false, 'elements' => array(
+        array('id' => $eid(), 'elType' => 'widget', 'widgetType' => 'heading', 'elements' => array(), 'settings' => (object) array('title' => '🔒 Secure checkout', 'header_size' => 'h1')),
+        array('id' => $eid(), 'elType' => 'widget', 'widgetType' => 'shortcode', 'elements' => array(), 'settings' => (object) array('shortcode' => self::CHECKOUT_SHORTCODE)),
+      ),
+      'settings' => (object) array('content_width' => 'boxed', 'boxed_width' => array('unit' => 'px', 'size' => 1100, 'sizes' => array()), 'padding' => $px(24, 20, 60, 20)),
+    ));
+    update_post_meta($id, '_elementor_edit_mode', 'builder');
+    update_post_meta($id, '_elementor_template_type', 'wp-page');
+    update_post_meta($id, '_elementor_version', defined('ELEMENTOR_VERSION') ? ELEMENTOR_VERSION : '3.0.0');
+    update_post_meta($id, '_elementor_data', wp_slash(wp_json_encode($data)));
+    update_post_meta($id, '_wp_page_template', 'elementor_header_footer');
+  }
+
+  /** WooCommerce "create pages": a TicketJunkies page with the same address is not a WooCommerce page. */
+  public static function avoid_tj_pages($found, $slug = '', $content = '') {
+    if ($found && !self::checkout_page_ok($found) && get_post_meta((int) $found, '_tj_page', true)) return 0;
+    return $found;
+  }
+
+  /** Don't bounce the checkout page to the cart while Elementor (or the block editor preview) is showing it. */
+  public static function editor_no_redirect($redirect) {
+    if (isset($_GET['elementor-preview']) || isset($_GET['preview']) || (class_exists('TJ_Frontend') && TJ_Frontend::is_editor())) return false;
+    return $redirect;
+  }
+
   public static function admin_notice() {
     if (!current_user_can('manage_options')) return;
     $screen = function_exists('get_current_screen') ? get_current_screen() : null;
@@ -132,6 +217,12 @@ final class TJ_Woo {
     }
     $m = self::meta();
     if (empty($m['gateways'])) echo '<div class="notice notice-warning"><p><strong>TicketJunkies:</strong> WooCommerce has no payment method switched on, so buyers cannot pay for tickets. Turn one on in <a href="' . esc_url(admin_url('admin.php?page=wc-settings&tab=checkout')) . '">WooCommerce → Settings → Payments</a>.</p></div>';
+    $cid = (int) get_option('woocommerce_checkout_page_id');
+    if (!self::checkout_page_ok($cid)) {
+      echo '<div class="notice notice-error"><p><strong>TicketJunkies:</strong> WooCommerce has no checkout page, so buyers cannot enter their card details. Reload this page and TicketJunkies will create one ("Secure Checkout").</p></div>';
+    } elseif ((int) get_option('tj_checkout_page_fixed') > time() - 7 * DAY_IN_SECONDS) {
+      echo '<div class="notice notice-success is-dismissible"><p><strong>TicketJunkies:</strong> buyers now pay on the WooCommerce page <a href="' . esc_url(get_permalink($cid)) . '" target="_blank">' . esc_html(get_the_title($cid)) . '</a> (the card form). Edit its design with <a href="' . esc_url(admin_url('post.php?post=' . $cid . '&action=elementor')) . '">Elementor</a>. The TicketJunkies "Checkout" page is a different page: it shows the order summary before payment.</p></div>';
+    }
   }
 
   // =====================================================================
@@ -187,6 +278,7 @@ final class TJ_Woo {
       if (!WC()->customer->get_billing_phone()) WC()->customer->set_billing_phone((string) self::g($b, 'buyerPhone', ''));
       WC()->customer->save();
     }
+    self::ensure_checkout_page();
     return wc_get_checkout_url();
   }
 

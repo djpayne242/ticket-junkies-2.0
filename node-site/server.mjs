@@ -846,7 +846,7 @@ const SECURITY_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy
 const BASE_HEADERS = {
   ...SECURITY_HEADERS,
   'X-Frame-Options': 'SAMEORIGIN',
-  'Permissions-Policy': 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=()',
+  'Permissions-Policy': 'camera=(self), geolocation=(self), microphone=(), usb=()',
   'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
   'Content-Security-Policy': "object-src 'none'; base-uri 'self'; frame-ancestors 'self'; form-action 'self'",
 };

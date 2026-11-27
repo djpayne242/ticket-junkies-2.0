@@ -92,9 +92,20 @@ final class TJ_Frontend {
     add_action('send_headers', function () {
       if (headers_sent() || !apply_filters('tj_harden_headers', true)) return;
       header('X-Content-Type-Options: nosniff');
-      header('X-Frame-Options: SAMEORIGIN');
+      // Only this site may show its pages inside a frame (stops click-jacking). Elementor's editor shows the page in a
+      // frame from the dashboard, so both the http and https (and www) forms of the site and dashboard addresses are allowed.
+      $origins = array();
+      foreach (array(home_url('/'), site_url('/'), admin_url('/')) as $u) {
+        $h = wp_parse_url($u, PHP_URL_HOST);
+        if (!$h) continue;
+        $p = wp_parse_url($u, PHP_URL_PORT);
+        foreach (array($h, strpos($h, 'www.') === 0 ? substr($h, 4) : 'www.' . $h) as $hh) foreach (array('https', 'http') as $sc) $origins[$sc . '://' . $hh . ($p ? ':' . $p : '')] = true;
+      }
+      header("Content-Security-Policy: frame-ancestors 'self' " . implode(' ', array_keys($origins)));
+      if (!isset($_GET['elementor-preview'])) header('X-Frame-Options: SAMEORIGIN');
       header('Referrer-Policy: strict-origin-when-cross-origin');
-      header('Permissions-Policy: camera=(self), geolocation=(self), microphone=(), payment=(), usb=()');
+      // "payment" stays allowed: card boxes from payment companies (Stripe, Square, PayPal…) and Apple Pay / Google Pay need it
+      header('Permissions-Policy: camera=(self), geolocation=(self), microphone=(), usb=()');
       if (is_ssl()) header('Strict-Transport-Security: max-age=15552000');
     });
     // Don't advertise the WordPress version
